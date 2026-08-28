@@ -73,7 +73,7 @@ Cada artefato gerado carrega na linha 3 um **stamp** dos insumos (`arquivo@sha25
 - **`/init:project-description`** — entrevista o desenvolvedor, descobre a stack e produz a descrição estruturada do projeto.
 - **`/init:user-stories`** — deriva user stories estruturadas e testáveis da descrição.
 - **`/init:database-schema`** — deriva um schema de banco sugerido em DBML.
-- **`/init:project-phases`** — planeja a construção em fases numeradas, agent-ready, com tasks, acceptance criteria e feature tests. **É o input padrão do `ralph.sh`.** Lê `.spec/init/design/` quando existir (refs de telas/componentes).
+- **`/init:project-phases`** — planeja a construção em fases numeradas, agent-ready, com tasks, acceptance criteria e feature tests. **É o input padrão do `ralph.sh`.** Lê `.spec/init/design/` quando existir (refs de telas/componentes). Os testes cobrem só regra de negócio — sem asserção de saída renderizada (`assertSee` e afins), sem browser/E2E, sem snapshot — e o próprio documento é escrito enxuto, já que os agentes o releem a cada fase.
 
 ### `/plan` — pipeline de planejamento de feature
 
@@ -131,6 +131,20 @@ Regras centrais:
 - **Contrato de ownership** — todo arquivo gerado carrega banner na linha 3. Arquivo sem banner (escrito à mão) nunca é sobrescrito; `--adopt` incorpora as regras concretas dele à árvore gerada e assume a posse.
 - **Preserva blocos de terceiros** — regiões `<tag>...</tag>` (ex.: Laravel Boost) são re-anexadas verbatim na regeneração.
 - Filtros `+id` / `-id` geram só um subconjunto (ex.: `/ai-context +AGENTS +architecture`).
+
+### `/ralph` — lançador de execução
+
+```
+/ralph [caminho-do-arquivo-de-fases] [--engine claude|codex] [--from N] [--max-cycles N] [--test-cmd "<cmd>"] [--keep-going] [--no-verify] [--dashboard] [--print]
+```
+
+Lançador do `scripts/ralph.sh` de dentro do Claude Code. Resolve o documento de fases, confere as pré-condições que o script abortaria (repositório git, árvore limpa, documento presente e bem formado, CLI da engine instalada), mostra a linha de comando exata para confirmação e inicia o run em background, com a saída em `.phases/logs/ralph.run.log`.
+
+- **A engine padrão aqui é `claude`** (o script sozinho usa `codex` por padrão), porque essa engine emite progresso por task.
+- **`--print`** para antes de lançar e só imprime a linha de comando — é uma flag do próprio comando, nunca repassada ao script.
+- **`--dashboard`** precisa de um terminal de verdade, então o comando imprime a linha para você rodar em vez de lançar.
+- Reporta a partir de `.phases/state/run.tsv` sob demanda e ao fim do run: fases concluídas / puladas / falhas, o gate que reprovou e o caminho do log.
+- **Nunca implementa uma fase, edita o documento de fases ou commita.** O `ralph.sh` é a única coisa que commita — um commit por fase validada.
 
 ## `scripts/ralph.sh` — orquestrador de execução
 
@@ -303,6 +317,7 @@ commands/
                                database-schema, project-phases
   plan.md                      /plan (roteador do pipeline de planejamento)
   ai-context.md                /ai-context (roteador da árvore de contexto)
+  ralph.md                     /ralph (lançador de execução)
 agents/                        specifier, clarifier, planner,
                                ai-context-{inspector,core,docs}
 scripts/

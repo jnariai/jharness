@@ -399,11 +399,11 @@ if case_enabled test-red-once; then
   rc=$(run_ralph "$d" test-red-once --engine claude --test-cmd "$d/test.sh" --max-cycles 2)
   assert_eq 0 "$rc" "exit 0"
   assert_eq 3 "$(commits "$d")" "1 commit por fase (ciclo intermediario nao commita)"
-  assert_contains "$d/out.log" "Gate 2 vermelho" "gate 2 reportado vermelho"
-  assert_contains "$d/out.log" "Ciclo de correcao 2/2" "entrou em ciclo de correcao"
+  assert_contains "$d/out.log" "Gate 2 red" "gate 2 reportado vermelho"
+  assert_contains "$d/out.log" "Fix cycle 2/2" "entrou em ciclo de correcao"
   # o prompt de correcao carrega a causa REAL, nao "os testes falharam" generico
   assert_contains "$d/repo/.phases/prompts/phase-01.cycle-2.txt" "ExpectedFooTest" "prompt de correcao carrega a saida do teste"
-  assert_contains "$d/repo/.phases/prompts/phase-01.cycle-2.txt" "## Fase a completar" "prompt de correcao e auto-contido (fase inteira)"
+  assert_contains "$d/repo/.phases/prompts/phase-01.cycle-2.txt" "## Phase to complete" "prompt de correcao e auto-contido (fase inteira)"
   # logs por ciclo, nunca sobrescritos
   test -f "$d/repo/.phases/logs/phase-01.cycle-1.log" && test -f "$d/repo/.phases/logs/phase-01.cycle-2.log" \
     && ok "logs por ciclo preservados" || bad "logs por ciclo preservados"
@@ -419,10 +419,10 @@ if case_enabled empty-diff; then
   rc=$(run_ralph "$d" empty-diff --engine claude --test-cmd "$d/test.sh" --max-cycles 2)
   assert_eq 1 "$rc" "exit 1"
   assert_eq 1 "$(commits "$d")" "nenhum commit criado (sem --allow-empty)"
-  assert_contains "$d/out.log" "a sessao nao escreveu nada" "gate 1 sinalizou a sessao vazia"
-  assert_contains "$d/out.log" "Gate 3 vermelho" "verificador reprovou contra o codigo real"
-  assert_contains "$d/out.log" "Parando na primeira fase que falhou" "politica default = parar"
-  assert_contains "$d/repo/.phases/prompts/phase-01.cycle-2.txt" "sem alterar nenhum arquivo" "causa do ciclo cita a sessao vazia"
+  assert_contains "$d/out.log" "the session wrote nothing" "gate 1 sinalizou a sessao vazia"
+  assert_contains "$d/out.log" "Gate 3 red" "verificador reprovou contra o codigo real"
+  assert_contains "$d/out.log" "Stopping at the first phase that failed" "politica default = parar"
+  assert_contains "$d/repo/.phases/prompts/phase-01.cycle-2.txt" "without changing any file" "causa do ciclo cita a sessao vazia"
 fi
 
 # ---------------------------------------------------------------------------
@@ -434,7 +434,7 @@ if case_enabled verify-incomplete; then
   rc=$(run_ralph "$d" verify-incomplete-once --engine claude --test-cmd "$d/test.sh" --max-cycles 2)
   assert_eq 0 "$rc" "exit 0"
   assert_eq 3 "$(commits "$d")" "1 commit por fase"
-  assert_contains "$d/out.log" "Gate 3 vermelho" "gate 3 reportado vermelho"
+  assert_contains "$d/out.log" "Gate 3 red" "gate 3 reportado vermelho"
   assert_contains "$d/repo/.phases/prompts/phase-01.cycle-2.txt" "TASK 1: INCOMPLETE" "prompt de correcao carrega as tasks incompletas verbatim"
   test -f "$d/repo/.phases/logs/phase-01.verify-1.log" && ok "log do verificador por ciclo" || bad "log do verificador por ciclo"
 fi
@@ -449,8 +449,8 @@ if case_enabled limit-epoch; then
   rc=$(run_ralph "$d" limit-epoch --engine claude --test-cmd "$d/test.sh" --max-cycles 1)
   assert_eq 0 "$rc" "exit 0 (limite nao consome ciclo)"
   assert_eq 3 "$(commits "$d")" "fases commitadas apos a espera"
-  assert_contains "$d/out.log" "Limite de uso atingido" "limite detectado"
-  assert_contains "$d/out.log" "Reset previsto para" "epoch de reset extraido do log"
+  assert_contains "$d/out.log" "Usage limit reached" "limite detectado"
+  assert_contains "$d/out.log" "Reset expected at" "epoch de reset extraido do log"
 fi
 
 # ---------------------------------------------------------------------------
@@ -461,7 +461,7 @@ if case_enabled limit-generic; then
   d=$(new_case limit-generic)
   rc=$(run_ralph "$d" limit-generic --engine codex --test-cmd "$d/test.sh" --max-cycles 1)
   assert_eq 0 "$rc" "exit 0"
-  assert_contains "$d/out.log" "Sem horario de reset no output" "usou o fallback de espera"
+  assert_contains "$d/out.log" "No reset time in the output" "usou o fallback de espera"
   assert_eq 3 "$(commits "$d")" "fases commitadas apos a espera"
 fi
 
@@ -475,7 +475,7 @@ if case_enabled false-429; then
   rc=$(run_ralph "$d" false-429 --engine codex --test-cmd "$d/test.sh" --max-cycles 1)
   elapsed=$(($(date +%s) - start))
   assert_eq 0 "$rc" "exit 0"
-  assert_not_contains "$d/out.log" "Limite de uso atingido" "nao interpretou 429 de teste como limite"
+  assert_not_contains "$d/out.log" "Usage limit reached" "nao interpretou 429 de teste como limite"
   assert_contains "$d/repo/.phases/logs/phase-01.cycle-1.log" "429 Too Many Requests" "o 429 realmente estava no log"
   [ "$elapsed" -lt 5 ] && ok "sem espera (${elapsed}s)" || bad "sem espera (${elapsed}s)"
 fi
@@ -492,8 +492,8 @@ if case_enabled resume; then
   rc=$(run_ralph "$d" ok --engine claude --test-cmd "$d/test.sh")
   assert_eq 0 "$rc" "segunda execucao verde"
   assert_eq "$before" "$(commits "$d")" "nenhum commit novo"
-  assert_contains "$d/out.log" "Progresso anterior preservado" "progresso preservado (input inalterado)"
-  assert_contains "$d/out.log" "(ja completada)" "fases puladas"
+  assert_contains "$d/out.log" "Previous progress preserved" "progresso preservado (input inalterado)"
+  assert_contains "$d/out.log" "(already completed)" "fases puladas"
 fi
 
 # ---------------------------------------------------------------------------
@@ -512,7 +512,7 @@ if case_enabled resume-invalidated; then
   )
   rc=$(run_ralph "$d" ok --engine claude --test-cmd "$d/test.sh")
   assert_eq 0 "$rc" "segunda execucao verde"
-  assert_contains "$d/out.log" "progresso zerado" "progresso invalidado com aviso"
+  assert_contains "$d/out.log" "progress reset" "progresso invalidado com aviso"
   assert_eq $((before + 4)) "$(commits "$d")" "3 fases re-executadas + commit da mutacao"
 fi
 
@@ -525,7 +525,7 @@ if case_enabled dirty-tree; then
   echo "trabalho nao commitado" > "$d/repo/rascunho.txt"
   rc=$(run_ralph "$d" ok --engine claude --test-cmd "$d/test.sh")
   assert_eq 1 "$rc" "exit 1"
-  assert_contains "$d/out.log" "Arvore de trabalho suja" "abortou com instrucao"
+  assert_contains "$d/out.log" "Dirty working tree" "abortou com instrucao"
   test -f "$d/state/impl_calls" && bad "nenhuma sessao de engine iniciada" || ok "nenhuma sessao de engine iniciada"
 fi
 
@@ -543,7 +543,7 @@ if case_enabled bad-format; then
   rc=$(run_ralph "$d" ok --engine claude --test-cmd "$d/test.sh")
   # "## Phase Two" nao casa com '^## Phase [0-9]+: ' -> heading malformado
   assert_eq 1 "$rc" "exit 1"
-  assert_contains "$d/out.log" "Contrato de formato violado" "abortou por formato invalido"
+  assert_contains "$d/out.log" "Format contract violated" "abortou por formato invalido"
   test -f "$d/state/impl_calls" && bad "nenhuma sessao de engine iniciada" || ok "nenhuma sessao de engine iniciada"
 fi
 
@@ -559,8 +559,8 @@ if case_enabled stall-after-red; then
   # o mock so escreve na 1a sessao: fase 1 commita apos o ciclo 2; fase 2 cai
   # no caminho "ja implementada" (o verificador ve o codigo e aprova)
   assert_eq 2 "$(commits "$d")" "1 commit (fase 1); fase 2 nao tinha o que commitar"
-  assert_contains "$d/out.log" "Gate 2 vermelho" "o ciclo comecou por um gate 2 vermelho"
-  assert_contains "$d/out.log" "a sessao nao escreveu nada" "gate 1 sinalizou a sessao vazia do ciclo 2"
+  assert_contains "$d/out.log" "Gate 2 red" "o ciclo comecou por um gate 2 vermelho"
+  assert_contains "$d/out.log" "the session wrote nothing" "gate 1 sinalizou a sessao vazia do ciclo 2"
   assert_contains "$d/out.log" "feat(phase-1)" "fase 1 commitada apos o ciclo de correcao"
 fi
 
@@ -580,7 +580,7 @@ if case_enabled already-done; then
 
   rc=$(run_ralph "$d" already-done --engine claude --test-cmd "$d/test.sh" --max-cycles 1)
   assert_eq 0 "$rc" "exit 0 (nao reprova fase ja implementada)"
-  assert_contains "$d/out.log" "JA IMPLEMENTADA" "reconheceu a fase como feita"
+  assert_contains "$d/out.log" "ALREADY IMPLEMENTED" "reconheceu a fase como feita"
   assert_eq "$before" "$(commits "$d")" "nenhum commit criado (nada a commitar)"
   assert_contains "$d/repo/.phases/.progress" "phase-01.md" "progresso registra a fase"
   assert_contains "$d/repo/.phases/.progress" "phase-02.md" "progresso registra a fase seguinte"
@@ -596,7 +596,7 @@ if case_enabled dirty-after-fail; then
   rc=$(run_ralph "$d" verify-incomplete-once --engine claude --test-cmd "$d/test.sh" --max-cycles 1)
   assert_eq 1 "$rc" "exit 1"
   assert_eq 1 "$(commits "$d")" "nenhum commit"
-  assert_contains "$d/out.log" "trabalho parcial desta fase ficou na arvore" "avisou sobre a arvore suja"
+  assert_contains "$d/out.log" "partial work of this phase stayed in the tree" "avisou sobre a arvore suja"
   assert_contains "$d/out.log" "git clean -fd" "deu a saida de descarte"
 fi
 
@@ -609,8 +609,8 @@ if case_enabled no-verify; then
   d=$(new_case no-verify)
   rc=$(run_ralph "$d" empty-diff --engine claude --test-cmd "$d/test.sh" --max-cycles 1 --no-verify)
   assert_eq 0 "$rc" "exit 0 (gate 2 verde decide sozinho)"
-  assert_contains "$d/out.log" "Gate 3 pulado (--no-verify)" "skip explicito logado"
-  assert_contains "$d/out.log" "Gate 2 verde contra o codigo em HEAD" "mensagem nao menciona gate 3 (nao rodou)"
+  assert_contains "$d/out.log" "Gate 3 skipped (--no-verify)" "skip explicito logado"
+  assert_contains "$d/out.log" "Gate 2 green against the code at HEAD" "mensagem nao menciona gate 3 (nao rodou)"
   test -f "$d/state/verify_calls" && bad "nenhuma sessao verificadora gasta" || ok "nenhuma sessao verificadora gasta"
 fi
 
@@ -624,7 +624,7 @@ if case_enabled verify-auto; then
   rc=$(CASE_VERIFY=auto run_ralph "$d" ok --engine claude --test-cmd "$d/test.sh")
   assert_eq 0 "$rc" "exit 0"
   assert_eq 3 "$(commits "$d")" "fases commitadas"
-  assert_contains "$d/out.log" "Gate 3 pulado: a sessao escreveu codigo" "skip logado com a causa"
+  assert_contains "$d/out.log" "Gate 3 skipped: the session wrote code" "skip logado com a causa"
   test -f "$d/state/verify_calls" && bad "nenhuma sessao verificadora gasta" || ok "nenhuma sessao verificadora gasta"
 fi
 
@@ -642,7 +642,7 @@ if case_enabled verify-model; then
   rc=$(run_ralph "$d" already-done --engine claude --test-cmd "$d/test.sh" --max-cycles 1)
   assert_eq 0 "$rc" "exit 0"
   assert_eq "sonnet" "$(cat "$d/state/verify_model" 2>/dev/null)" "verify chamado com --model sonnet"
-  assert_contains "$d/out.log" "modelo: sonnet" "log do gate 3 informa o modelo"
+  assert_contains "$d/out.log" "model: sonnet" "log do gate 3 informa o modelo"
 
   d2=$(new_case verify-model-override)
   mkdir -p "$d2/repo/src"
@@ -664,15 +664,15 @@ if case_enabled sail-up; then
   git -C "$d/repo" add -A && git -C "$d/repo" commit -q -m "chore: sail"
   rc=$(run_ralph "$d" ok --engine claude)   # sem --test-cmd: exercita a deteccao
   assert_eq 0 "$rc" "exit 0"
-  assert_contains "$d/out.log" "comando de teste (detectado): vendor/bin/sail test" "detectou sail test"
+  assert_contains "$d/out.log" "test command (detected): vendor/bin/sail test" "detectou sail test"
   assert_not_contains "$d/out.log" "composer test" "composer test nao foi escolhido"
-  assert_contains "$d/out.log" "Sail: containers de pe" "checou containers no preflight"
+  assert_contains "$d/out.log" "Sail: containers up" "checou containers no preflight"
   # base = 2 commits (fixture + chore: sail) + 2 fases
   assert_eq 4 "$(commits "$d")" "fases commitadas (gate 2 rodou de verdade)"
   assert_eq 2 "$(cat "$d/state/test_calls")" "a suite rodou 1x por fase, via sail"
   # o agente precisa saber qual runner usar, senao roda php artisan test no host
   assert_contains "$d/repo/.phases/prompts/phase-01.cycle-1.txt" "vendor/bin/sail test" "prompt informa o comando de teste"
-  assert_contains "$d/repo/.phases/prompts/phase-01.cycle-1.txt" "Nunca rode essas ferramentas no host" "prompt avisa sobre o container"
+  assert_contains "$d/repo/.phases/prompts/phase-01.cycle-1.txt" "Never run those tools on the host" "prompt avisa sobre o container"
 fi
 
 # ---------------------------------------------------------------------------
@@ -685,7 +685,7 @@ if case_enabled sail-down; then
   git -C "$d/repo" add -A && git -C "$d/repo" commit -q -m "chore: sail"
   rc=$(run_ralph "$d" ok --engine claude)
   assert_eq 1 "$rc" "exit 1"
-  assert_contains "$d/out.log" "containers nao estao de pe" "abortou com a causa"
+  assert_contains "$d/out.log" "containers are not up" "abortou com a causa"
   assert_contains "$d/out.log" "vendor/bin/sail up -d" "instruiu como subir o ambiente"
   assert_eq 2 "$(commits "$d")" "nenhum commit de fase"
   test -f "$d/state/impl_calls" && bad "nenhuma sessao de engine iniciada" || ok "nenhuma sessao de engine iniciada"
@@ -701,7 +701,7 @@ if case_enabled sail-override; then
   git -C "$d/repo" add -A && git -C "$d/repo" commit -q -m "chore: sail"
   rc=$(run_ralph "$d" ok --engine claude --test-cmd "$d/test.sh")
   assert_eq 0 "$rc" "exit 0 (nao checa containers para cmd sem sail)"
-  assert_contains "$d/out.log" "comando de teste (--test-cmd)" "override respeitado"
+  assert_contains "$d/out.log" "test command (--test-cmd)" "override respeitado"
   assert_eq 4 "$(commits "$d")" "fases commitadas"
 fi
 
@@ -716,7 +716,7 @@ if case_enabled laravel-no-sail; then
   git -C "$d/repo" add -A && git -C "$d/repo" commit -q -m "chore: laravel"
   # nao roda ate o fim: so precisamos do preflight resolvendo o comando
   run_ralph "$d" empty-diff --engine claude --max-cycles 1 > /dev/null
-  assert_contains "$d/out.log" "comando de teste (detectado): composer test" "sem sail -> composer test"
+  assert_contains "$d/out.log" "test command (detected): composer test" "sem sail -> composer test"
   assert_not_contains "$d/out.log" "Sail" "nao mencionou Sail"
 fi
 
@@ -832,8 +832,8 @@ if case_enabled dashboard-degrade; then
   cp "$RALPH" "$d/ralph-solo.sh"
   rc=$(RALPH="$d/ralph-solo.sh" run_ralph "$d" ok --engine claude --test-cmd "$d/test.sh" --dashboard)
   assert_eq 0 "$rc" "exit 0 (run completo mesmo sem o painel)"
-  assert_contains "$d/out.log" "nao existe" "avisou que o painel nao esta disponivel"
-  assert_contains "$d/out.log" "estado continua publicado" "apontou o caminho alternativo"
+  assert_contains "$d/out.log" "does not exist" "avisou que o painel nao esta disponivel"
+  assert_contains "$d/out.log" "State is still published" "apontou o caminho alternativo"
   assert_eq 3 "$(commits "$d")" "fases commitadas normalmente"
 fi
 
@@ -916,7 +916,7 @@ if case_enabled test-cmd-missing; then
   rc=$(RALPH_TEST_CMD="vendor/bin/sail composer test:parallel" \
        run_ralph_env "$d" ok --engine claude)
   assert_eq 1 "$rc" "exit 1"
-  assert_contains "$d/out.log" "nao executavel" "abortou com a causa"
+  assert_contains "$d/out.log" "not executable" "abortou com a causa"
   assert_contains "$d/out.log" "RALPH_TEST_CMD" "identificou a origem do comando"
   assert_contains "$d/out.log" "env -u RALPH_TEST_CMD" "deu a saida"
   assert_eq 1 "$(commits "$d")" "nenhum commit de fase"
