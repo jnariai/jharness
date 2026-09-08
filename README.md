@@ -1,4 +1,4 @@
-# Beer and Code Harness (`bc-harness`)
+# jharness
 
 > 🇧🇷 [Documentação em português](README.pt-BR.md)
 
@@ -41,10 +41,10 @@ Cross-cutting: **`/ai-context`** keeps the context tree (`AGENTS.md`, `CLAUDE.md
 This repository is a Claude Code plugin (`.claude-plugin/plugin.json`). Install it via marketplace/local path according to your plugin setup:
 
 ```
-/plugin install bc-harness
+/plugin install jharness
 ```
 
-Commands are namespaced: `/bc-harness:init`, `/bc-harness:plan`, etc. (abbreviated without the namespace throughout this document).
+Commands are namespaced: `/jharness:init`, `/jharness:plan`, etc. (abbreviated without the namespace throughout this document).
 
 `ralph.sh` is a standalone bash script — copy or reference `scripts/ralph.sh` and run it directly in the target project's repository.
 
@@ -75,7 +75,7 @@ Every generated artifact carries a **stamp** of its inputs on line 3 (`file@sha2
 - **`/init:project-description`** — interviews the developer, discovers the stack, and produces a structured project description.
 - **`/init:user-stories`** — derives structured, testable user stories from the description.
 - **`/init:database-schema`** — derives a suggested database schema in DBML.
-- **`/init:project-phases`** — plans the build into numbered, agent-ready phases with tasks, acceptance criteria, and feature tests. **This is `ralph.sh`'s default input.** Reads `.spec/init/design/` when present (screen/component refs).
+- **`/init:project-phases`** — plans the build into numbered, agent-ready phases with tasks, acceptance criteria, and feature tests. **This is `ralph.sh`'s default input.** Reads `.spec/init/design/` when present (screen/component refs). Tests target business rules only — no rendered-output assertions (`assertSee` and friends), no browser/E2E, no snapshots — and the document itself is written terse, since agents re-read it on every phase run.
 
 ### `/plan` — feature planning pipeline
 
@@ -133,6 +133,20 @@ Core rules:
 - **Ownership contract** — every generated file carries a banner on line 3. A file without the banner (hand-written) is never clobbered; `--adopt` folds its concrete rules into the generated tree and takes ownership.
 - **Preserves third-party blocks** — `<tag>...</tag>` regions (e.g. Laravel Boost) are re-appended verbatim on regeneration.
 - `+id` / `-id` filters generate only a subset (e.g. `/ai-context +AGENTS +architecture`).
+
+### `/ralph` — execution launcher
+
+```
+/ralph [path-to-phases-file] [--engine claude|codex] [--from N] [--max-cycles N] [--test-cmd "<cmd>"] [--keep-going] [--no-verify] [--dashboard] [--print]
+```
+
+Launcher for `scripts/ralph.sh` from inside Claude Code. It resolves the phase document, checks the preconditions the script would abort on (git repo, clean tree, document present and well-formed, engine CLI installed), shows the exact command line for confirmation, and starts the run in the background with output in `.phases/logs/ralph.run.log`.
+
+- **Engine default is `claude`** here (the bare script defaults to `codex`), because that engine emits per-task progress.
+- **`--print`** stops before launching and just prints the command line — its own flag, never forwarded to the script.
+- **`--dashboard`** needs a real terminal, so the command prints the line for you to run yourself instead of launching it.
+- Reports from `.phases/state/run.tsv` on request and when the run ends: completed / skipped / failed phases, the gate that failed, and the log path.
+- **Never implements a phase, edits the phase document, or commits.** `ralph.sh` is the only thing that commits — one commit per validated phase.
 
 ## `scripts/ralph.sh` — execution orchestrator
 
@@ -307,8 +321,12 @@ commands/
                                database-schema, project-phases
   plan.md                      /plan (planning pipeline router)
   ai-context.md                /ai-context (context tree router)
+  ralph.md                     /ralph (execution launcher)
 agents/                        specifier, clarifier, planner,
                                ai-context-{inspector,core,docs}
+guidelines/
+  laravel-livewire.md           opinionated Laravel + Livewire conventions;
+                               drop into a project as docs/agents/coding_guidelines.md
 scripts/
   ralph.sh                     phase-by-phase execution orchestrator
   ralph-watch.sh               live run panel (reads .phases/state/)

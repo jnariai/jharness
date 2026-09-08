@@ -78,6 +78,8 @@ Format constraints (ralph's `split_phases` dictates them):
 - Prioritize risk control for auth, data, infrastructure, and migration changes.
 - Distinguish confirmed facts from assumptions (`[UNVERIFIED]` marker) and inferred behavior.
 - Tests absent for changed behavior → dedicated testing task.
+- Tests assert business rules at the layer that owns them: return values, persisted state, HTTP status and response data, dispatched events/jobs, exceptions and validation errors. **Never rendered output** — no markup/text assertions (Laravel `assertSee`, `assertSeeText`, `assertDontSee`), no browser/E2E suites (Dusk, Cypress, Playwright), no component snapshots. Laravel: `assertDatabaseHas`, `assertJsonPath`, `assertStatus`, `assertRedirect`, `Event::assertDispatched`; equivalents in other stacks.
+- **Token economy**: PLAN.md and PHASES.md are re-read by an agent on every run. One line per field, no restated SPEC prose — cite `RF-XX`/file paths instead. One test per rule, no duplicate coverage across tasks. Cut words, never scope.
 - **Architecture is source of truth over description text**: when SPEC/task intent contradicts the resolved architecture (code + AGENTS tree), plan toward the architecture and raise a QUESTION under `## Open Questions` naming both sides — never plan the contradicting version silently.
 - Architecture references provided → PLAN MUST name the source files and preserve the documented layering/delegation rules inside task descriptions. Missing → explicit warning in `## Open Questions`; never present the plan as architecture-validated.
 - One targeted question max when a blocking ambiguity prevents a reliable plan — return it instead of a partial plan.

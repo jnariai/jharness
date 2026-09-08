@@ -135,8 +135,20 @@ The self-checks in step 5 enforce this format mechanically.
 
 - Every task has **acceptance criteria** — concrete, validatable conditions (states, limits, failure paths), not vague intent.
 - **Business-logic tasks** (rules, calculations, state transitions, permissions, validations, workflows) **must** specify the **automated feature tests** to generate. Tests **primarily assert business rules** — the limits, states, and edge cases from the stories and schema.
+- Tests assert business rules **at the layer that owns them**: service/domain return values, persisted state, HTTP status and response data, dispatched events/jobs, raised exceptions and validation errors.
+- **Never assert rendered output.** No markup/text assertions (Laravel `assertSee`, `assertSeeText`, `assertDontSee`, Blade/Inertia render checks), no browser/E2E suites (Dusk, Cypress, Playwright), no component snapshots. A test that breaks when copy changes is testing the wrong layer. In Laravel prefer `assertDatabaseHas`, `assertJsonPath`, `assertStatus`, `assertRedirect`, `Event::assertDispatched`; use each stack's equivalents.
+- One test per rule or edge case. No duplicate coverage across tasks — cite the earlier task instead of restating the case.
 - **Frontend-only tasks** (building a screen/component with no business logic) **do not require tests**, but **must** have acceptance criteria that can be validated (matches design reference, renders required elements/states, responsive/interaction behavior), plus a **Design ref** pointing at the relevant `.spec/init/design/` artifact.
 - Keep every task traceable to a story (`US-x.y`), a schema table, a workflow, or a design artifact. No invented scope.
+
+### Token economy
+
+Every line of this document is re-read by an agent on **every** phase run, so words here are paid for many times over.
+
+- One line per field. No preamble, no restated context, no adjectives, no "this task will…".
+- Cite instead of re-explaining: `US-3.2`, `orders.status`, `.spec/init/design/checkout.md` — never paraphrase the story, schema, or design back into the task.
+- Say a thing once. Shared setup goes in the phase `**Goal:**` line, not repeated per task.
+- Cut words, never scope: coverage stays complete, prose gets terse.
 
 ### 4. Write the document
 
@@ -195,7 +207,7 @@ Rules for the document:
 - Foundation phases come first; models are relationship-complete out of the foundation.
 - Every phase (parent + its sub-phases) fits one agent session (see Phase sizing).
 - Every task is traceable; every business-logic task has feature tests; every screen task has a design ref (or an open question if design is missing).
-- Cover **everything** in the description, stories, and schema. Completeness beats brevity.
+- Cover **everything** in the description, stories, and schema. Completeness of *scope*, never of prose (see Token economy).
 
 ### 5. Self-checks (run until green)
 
