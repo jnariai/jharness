@@ -320,6 +320,9 @@ commands/
   ralph.md                     /ralph (lançador de execução)
 agents/                        specifier, clarifier, planner,
                                ai-context-{inspector,core,docs}
+guidelines/
+  laravel-livewire.md           convenções opinativas de Laravel + Livewire;
+                               copie no projeto como docs/agents/coding_guidelines.md
 scripts/
   ralph.sh                     orquestrador de execução por fases
   ralph-watch.sh               painel ao vivo do run (lê .phases/state/)

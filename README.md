@@ -324,6 +324,9 @@ commands/
   ralph.md                     /ralph (execution launcher)
 agents/                        specifier, clarifier, planner,
                                ai-context-{inspector,core,docs}
+guidelines/
+  laravel-livewire.md           opinionated Laravel + Livewire conventions;
+                               drop into a project as docs/agents/coding_guidelines.md
 scripts/
   ralph.sh                     phase-by-phase execution orchestrator
   ralph-watch.sh               live run panel (reads .phases/state/)
