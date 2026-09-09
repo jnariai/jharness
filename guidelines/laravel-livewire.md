@@ -1,11 +1,15 @@
 # Laravel + Livewire coding guidelines
 
+<!-- harness-meta:start -->
 Drop this into a Laravel project as `docs/agents/coding_guidelines.md`. It is the
 convention layer agents must follow when writing code in that project: `/plan`
 decomposes against it, `ralph.sh` sessions read it before the first edit.
+`/ai-context` copies it there automatically when the target is a Laravel +
+Livewire repo and the file is absent; this block is stripped from the copy.
 
 > Keep it hand-written there — without the `/ai-context` banner on line 3 the
 > generator never clobbers it. Do not run `/ai-context --adopt` on this file.
+<!-- harness-meta:end -->
 
 Stack assumed: Laravel 12+, **Livewire 4+ single-file components**
 (`new class extends Component` plus its template in one file), Pest,

@@ -114,11 +114,11 @@ Gera ou atualiza 10 artefatos a partir do **código implementado** (nunca lê `.
 | Artefato | Conteúdo |
 |---|---|
 | `AGENTS.md` | 6 seções: comandos, convenções, regras comportamentais, setup, referências, índice de docs |
-| `CLAUDE.md` | Redirect ≤ 400 bytes para AGENTS.md |
+| `CLAUDE.md` | Redirect ≤ 520 bytes para AGENTS.md |
 | `docs/agents/project_overview.md` | Propósito, consumidores, fluxo macro |
 | `docs/agents/architecture.md` | Estilo, layout, responsabilidades por camada |
 | `docs/agents/tech_stack.md` | Linguagem, framework, runtime, tooling de teste |
-| `docs/agents/coding_guidelines.md` | ≥ 3 padrões observados + enforcement |
+| `docs/agents/coding_guidelines.md` | ≥ 3 padrões observados + enforcement — ou a camada de convenções Laravel + Livewire, copiada verbatim |
 | `docs/agents/domain_rules.md` | Regras de negócio como implementadas |
 | `docs/agents/api_contracts.md` | Endpoints, payloads, formatos de mensagem |
 | `docs/agents/data_model.md` | Entidades, storage, migrations |
@@ -130,6 +130,7 @@ Regras centrais:
 - **Documenta a realidade (AS IS)** — código, manifests, CI e configs são as únicas fontes; nunca inventa, nunca prescreve.
 - **Contrato de ownership** — todo arquivo gerado carrega banner na linha 3. Arquivo sem banner (escrito à mão) nunca é sobrescrito; `--adopt` incorpora as regras concretas dele à árvore gerada e assume a posse.
 - **Preserva blocos de terceiros** — regiões `<tag>...</tag>` (ex.: Laravel Boost) são re-anexadas verbatim na regeneração.
+- **Camada de convenções da stack** — em alvo Laravel + Livewire (`composer.json` com `laravel/framework` + `livewire/livewire`), `guidelines/laravel-livewire.md` é copiado para `docs/agents/coding_guidelines.md` quando o arquivo não existe, e `AGENTS.md` §2 + `CLAUDE.md` citam ele como obrigatório. A cópia é escrita à mão: nunca regenerada, nunca adotada, livre para editar.
 - Filtros `+id` / `-id` geram só um subconjunto (ex.: `/ai-context +AGENTS +architecture`).
 
 ### `/ralph` — lançador de execução
@@ -321,8 +322,9 @@ commands/
 agents/                        specifier, clarifier, planner,
                                ai-context-{inspector,core,docs}
 guidelines/
-  laravel-livewire.md           convenções opinativas de Laravel + Livewire;
-                               copie no projeto como docs/agents/coding_guidelines.md
+  laravel-livewire.md          convenções opinativas de Laravel + Livewire;
+                               /ai-context copia no projeto Laravel + Livewire
+                               como docs/agents/coding_guidelines.md
 scripts/
   ralph.sh                     orquestrador de execução por fases
   ralph-watch.sh               painel ao vivo do run (lê .phases/state/)

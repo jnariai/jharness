@@ -116,11 +116,11 @@ Generates or refreshes 10 artifacts from the **implemented code** (never reads `
 | Artifact | Content |
 |---|---|
 | `AGENTS.md` | 6 sections: commands, conventions, behavioral rules, setup, references, docs index |
-| `CLAUDE.md` | ≤ 400-byte redirect to AGENTS.md |
+| `CLAUDE.md` | ≤ 520-byte redirect to AGENTS.md |
 | `docs/agents/project_overview.md` | Purpose, consumers, macro flow |
 | `docs/agents/architecture.md` | Style, layout, layer responsibilities |
 | `docs/agents/tech_stack.md` | Language, framework, runtime, test tooling |
-| `docs/agents/coding_guidelines.md` | ≥ 3 observed patterns + enforcement |
+| `docs/agents/coding_guidelines.md` | ≥ 3 observed patterns + enforcement — or the Laravel + Livewire convention layer, seeded verbatim |
 | `docs/agents/domain_rules.md` | Business rules as implemented |
 | `docs/agents/api_contracts.md` | Endpoints, payloads, message formats |
 | `docs/agents/data_model.md` | Entities, storage, migrations |
@@ -132,6 +132,7 @@ Core rules:
 - **Documents reality (AS IS)** — code, manifests, CI, and configs are the only sources; never invents, never prescribes.
 - **Ownership contract** — every generated file carries a banner on line 3. A file without the banner (hand-written) is never clobbered; `--adopt` folds its concrete rules into the generated tree and takes ownership.
 - **Preserves third-party blocks** — `<tag>...</tag>` regions (e.g. Laravel Boost) are re-appended verbatim on regeneration.
+- **Stack convention layer** — on a Laravel + Livewire target (`composer.json` requires `laravel/framework` + `livewire/livewire`), `guidelines/laravel-livewire.md` is copied to `docs/agents/coding_guidelines.md` when that file is absent, and `AGENTS.md` §2 + `CLAUDE.md` cite it as mandatory. The copy is hand-written: never regenerated, never adopted, safe to edit.
 - `+id` / `-id` filters generate only a subset (e.g. `/ai-context +AGENTS +architecture`).
 
 ### `/ralph` — execution launcher
@@ -325,8 +326,9 @@ commands/
 agents/                        specifier, clarifier, planner,
                                ai-context-{inspector,core,docs}
 guidelines/
-  laravel-livewire.md           opinionated Laravel + Livewire conventions;
-                               drop into a project as docs/agents/coding_guidelines.md
+  laravel-livewire.md          opinionated Laravel + Livewire conventions;
+                               /ai-context copies it into a Laravel + Livewire
+                               project as docs/agents/coding_guidelines.md
 scripts/
   ralph.sh                     phase-by-phase execution orchestrator
   ralph-watch.sh               live run panel (reads .phases/state/)

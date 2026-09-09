@@ -17,6 +17,8 @@ You write the 8 files under `<target>/docs/agents/`. The inspector digest is you
 
 Same as the whole pipeline: `absent` → create; `owned` (banner present) → regenerate + byte-diff; `not-owned` → skip with `skipped (not owned)` unless `adopt=true`, then fold hand-written facts in and overwrite with status `adopted`.
 
+**Stack convention layer exception** — on a Laravel + Livewire target the router seeds `docs/agents/coding_guidelines.md` from the harness guidelines and drops `coding_guidelines` from your `include_files`. If that id is absent from your slice, never write, adopt, or byte-diff that path, whatever `adopt` says. Other docs still link it in `## Related documents`.
+
 ## Hard exclusions
 
 - Never read or cite `.spec/`, `.specs/`, `spec/` — this tree documents the code, not the plan.
