@@ -1045,15 +1045,14 @@ tooling already present in the repository. If the project has a memory or
 context tool configured, use it to understand the history.
 
 ## Testing policy
-Test the business rule at the layer that implements it: service/domain return
+Test everything, backend feature tests first. Every behavior change gets tests
+of the business rule at the layer that implements it: service/domain return
 values, persisted state, HTTP response status and data, dispatched events/jobs,
 exceptions and validation errors.
-Do NOT test rendered output: no assertions on markup or screen text
-(in Laravel: assertSee, assertSeeText, assertDontSee, checking Blade/Inertia),
-no browser/E2E tests (Dusk, Cypress, Playwright), no component snapshots. A test
-that breaks when the screen text changes is at the wrong layer.
 In Laravel use assertDatabaseHas, assertJsonPath, assertStatus, assertRedirect,
 Event::assertDispatched — or the equivalent for this project's stack.
+Frontend tests (rendered output such as assertSee, component UI state, browser
+tests) are welcome on top, but never as the only test of a business rule.
 One test per rule or edge case; do not duplicate coverage between items.
 
 ## Output economy

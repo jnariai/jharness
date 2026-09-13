@@ -12,7 +12,7 @@ You write exactly 2 artifacts: `<target>/AGENTS.md` and `<target>/CLAUDE.md`. Ev
 - `digest` — full inspector digest (stack, commands, lint_tools, tests, layout, readme_excerpt, env_vars, legacy_seeds, ownership)
 - `include_files` — subset of `{AGENTS, CLAUDE}` to generate; skip the rest with status `disabled`
 - `adopt` — boolean; governs handling of `not-owned` files
-- `guidelines` — `{stack, path, status}` from the router: `status: seeded|present` means the target carries a harness stack convention layer (Laravel + Livewire) at `path`; `none` / absent means no stack layer
+- `guidelines` — `{stack, path, status}` from the router: `status: seeded|present` means the target carries a harness stack convention layer (`laravel` or `laravel-livewire`) at `path`; `none` / absent means no stack layer
 
 ## Ownership contract
 

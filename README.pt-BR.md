@@ -73,7 +73,7 @@ Cada artefato gerado carrega na linha 3 um **stamp** dos insumos (`arquivo@sha25
 - **`/init:project-description`** — entrevista o desenvolvedor, descobre a stack e produz a descrição estruturada do projeto.
 - **`/init:user-stories`** — deriva user stories estruturadas e testáveis da descrição.
 - **`/init:database-schema`** — deriva um schema de banco sugerido em DBML.
-- **`/init:project-phases`** — planeja a construção em fases numeradas, agent-ready, com tasks, acceptance criteria e feature tests. **É o input padrão do `ralph.sh`.** Lê `.spec/init/design/` quando existir (refs de telas/componentes). Os testes cobrem só regra de negócio — sem asserção de saída renderizada (`assertSee` e afins), sem browser/E2E, sem snapshot — e o próprio documento é escrito enxuto, já que os agentes o releem a cada fase.
+- **`/init:project-phases`** — planeja a construção em fases numeradas, agent-ready, com tasks, acceptance criteria e feature tests. **É o input padrão do `ralph.sh`.** Lê `.spec/init/design/` quando existir (refs de telas/componentes). Os testes cobrem tudo, com feature tests de backend primeiro — testes de saída renderizada e de browser podem vir por cima, nunca como única prova de uma regra — e o próprio documento é escrito enxuto, já que os agentes o releem a cada fase.
 
 ### `/plan` — pipeline de planejamento de feature
 
@@ -118,7 +118,7 @@ Gera ou atualiza 10 artefatos a partir do **código implementado** (nunca lê `.
 | `docs/agents/project_overview.md` | Propósito, consumidores, fluxo macro |
 | `docs/agents/architecture.md` | Estilo, layout, responsabilidades por camada |
 | `docs/agents/tech_stack.md` | Linguagem, framework, runtime, tooling de teste |
-| `docs/agents/coding_guidelines.md` | ≥ 3 padrões observados + enforcement — ou a camada de convenções Laravel + Livewire, copiada verbatim |
+| `docs/agents/coding_guidelines.md` | ≥ 3 padrões observados + enforcement — ou a camada de convenções Laravel (+ Livewire), copiada verbatim |
 | `docs/agents/domain_rules.md` | Regras de negócio como implementadas |
 | `docs/agents/api_contracts.md` | Endpoints, payloads, formatos de mensagem |
 | `docs/agents/data_model.md` | Entidades, storage, migrations |
@@ -130,7 +130,7 @@ Regras centrais:
 - **Documenta a realidade (AS IS)** — código, manifests, CI e configs são as únicas fontes; nunca inventa, nunca prescreve.
 - **Contrato de ownership** — todo arquivo gerado carrega banner na linha 3. Arquivo sem banner (escrito à mão) nunca é sobrescrito; `--adopt` incorpora as regras concretas dele à árvore gerada e assume a posse.
 - **Preserva blocos de terceiros** — regiões `<tag>...</tag>` (ex.: Laravel Boost) são re-anexadas verbatim na regeneração.
-- **Camada de convenções da stack** — em alvo Laravel + Livewire (`composer.json` com `laravel/framework` + `livewire/livewire`), `guidelines/laravel-livewire.md` é copiado para `docs/agents/coding_guidelines.md` quando o arquivo não existe, e `AGENTS.md` §2 + `CLAUDE.md` citam ele como obrigatório. A cópia é escrita à mão: nunca regenerada, nunca adotada, livre para editar.
+- **Camada de convenções da stack** — em alvo Laravel (`composer.json` com `laravel/framework`), `guidelines/laravel.md` — seguido de `guidelines/livewire.md` quando `livewire/livewire` também é exigido — é copiado para `docs/agents/coding_guidelines.md` quando o arquivo não existe, e `AGENTS.md` §2 + `CLAUDE.md` citam ele como obrigatório. A cópia é escrita à mão: nunca regenerada, nunca adotada, livre para editar. `/update` traz as revisões posteriores do upstream para ela.
 - Filtros `+id` / `-id` geram só um subconjunto (ex.: `/ai-context +AGENTS +architecture`).
 
 ### `/ralph` — lançador de execução
@@ -146,6 +146,29 @@ Lançador do `scripts/ralph.sh` de dentro do Claude Code. Resolve o documento de
 - **`--dashboard`** precisa de um terminal de verdade, então o comando imprime a linha para você rodar em vez de lançar.
 - Reporta a partir de `.phases/state/run.tsv` sob demanda e ao fim do run: fases concluídas / puladas / falhas, o gate que reprovou e o caminho do log.
 - **Nunca implementa uma fase, edita o documento de fases ou commita.** O `ralph.sh` é a única coisa que commita — um commit por fase validada.
+
+### `/update` — atualiza o harness e as guidelines do projeto
+
+```
+/update [path] [--check] [--ref <branch|tag>] [--repo <git-url>] [--force] [--skip-plugin]
+```
+
+Clona o harness do GitHub (`jnariai/jharness`, `main` por padrão) num diretório temporário e atualiza duas coisas:
+
+1. **O harness** — quando o plugin instalado difere do upstream, roda `claude plugin marketplace update` + `claude plugin update jharness@<marketplace>`. Reinicie o Claude Code para carregar a nova versão. Plugin não gerenciado pelo Claude Code (ex.: checkout via `--plugin-dir`) fica intocado.
+2. **As coding guidelines do projeto** — `scripts/sync-guidelines.sh` compara `docs/agents/coding_guidelines.md` com as guidelines do upstream para a stack do projeto (`guidelines/laravel.md`, mais `guidelines/livewire.md` em projetos Livewire):
+
+| Arquivo local | Resultado |
+|---|---|
+| ausente | adicionado (`seeded`) |
+| idêntico ao upstream | `current` |
+| idêntico byte a byte a uma revisão **anterior** do upstream (nunca editado) | atualizado (`updated`) |
+| não bate com nenhuma revisão do upstream (editado à mão) | mostra o diff e você escolhe: manter o seu, gravar o upstream ao lado como `coding_guidelines.upstream.md`, ou sobrescrever (`--force` pula a pergunta) |
+
+- **`--check`** reporta versões, status e diff sem escrever nada.
+- Stack desconhecida → nada é adicionado; o `/ai-context` documenta as convenções que o código já segue.
+- Quando `AGENTS.md` / `CLAUDE.md` ainda não citam as guidelines, indica rodar `/ai-context +AGENTS +CLAUDE`.
+- Escreve só `docs/agents/coding_guidelines.md` (ou o irmão `.upstream.md`), nunca executa código do clone, nunca commita.
 
 ## `scripts/ralph.sh` — orquestrador de execução
 
@@ -319,16 +342,21 @@ commands/
   plan.md                      /plan (roteador do pipeline de planejamento)
   ai-context.md                /ai-context (roteador da árvore de contexto)
   ralph.md                     /ralph (lançador de execução)
+  update.md                    /update (sync do harness + guidelines do GitHub)
 agents/                        specifier, clarifier, planner,
                                ai-context-{inspector,core,docs}
 guidelines/
-  laravel-livewire.md          convenções opinativas de Laravel + Livewire;
-                               /ai-context copia no projeto Laravel + Livewire
+  laravel.md                   convenções opinativas de Laravel
+  livewire.md                  camada Livewire sobre o laravel.md
+                               /ai-context compõe os dois no projeto Laravel
                                como docs/agents/coding_guidelines.md
 scripts/
   ralph.sh                     orquestrador de execução por fases
   ralph-watch.sh               painel ao vivo do run (lê .phases/state/)
   test-ralph.sh                suite red/green do ralph com engine mock
+  sync-guidelines.sh           sincroniza docs/agents/coding_guidelines.md com
+                               uma árvore do harness (usado pelo /update)
+  test-sync-guidelines.sh      suite red/green do sync-guidelines.sh
   check-init-drift.sh          guarda contra drift textual das regras
                                duplicadas nos comandos init
   check-shell.sh               bash -n + shellcheck em scripts/*.sh
@@ -341,11 +369,14 @@ docs/plans/                    planos de hardening internos do harness
 scripts/test-ralph.sh        # suite do ralph.sh — binários fake `claude`/`codex`
                              # no PATH, zero rede, zero token; exit 0 = verde
 scripts/test-ralph.sh <caso> # roda um caso específico
+scripts/test-sync-guidelines.sh  # suite do sync-guidelines.sh — upstream fake
 scripts/check-shell.sh       # bash -n em todos os scripts + shellcheck se disponível
 scripts/check-init-drift.sh  # âncoras verbatim das regras compartilhadas dos init:*
 ```
 
 Sobre o `check-init-drift.sh`: os quatro `commands/init/*.md` **inlinam de propósito** as mesmas regras de entrevista, idioma, re-run e staleness — comandos de plugin precisam ser auto-contidos em runtime (executam dentro do projeto do desenvolvedor, onde a raiz do plugin não é alcançável via `@`-includes). O custo dessa duplicação é drift silencioso; o script torna o drift barulhento.
+
+Release: suba o `version` em `.claude-plugin/plugin.json` e `.claude-plugin/marketplace.json`. O Claude Code identifica a instalação do plugin por esse campo — sem o bump, o `claude plugin update` (e portanto o `/update`) não vê nada novo.
 
 ## Princípios de design
 

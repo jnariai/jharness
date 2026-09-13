@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "jharness marketplace — commands, scripts, and hooks for building robust, tested, real-world-proven projects.",
-    "version": "0.2.0"
+    "version": "0.3.0"
   },
   "plugins": [
     {

@@ -74,36 +74,34 @@ git -C <target> rev-parse --is-inside-work-tree
 
 Fails → abort with `Target <path> is not a git repository — aborting.` Write nothing.
 
-### 2.5 — Seed stack guidelines (Laravel + Livewire only)
+### 2.5 — Seed stack guidelines (Laravel only)
 
-The harness ships an opinionated convention layer at `guidelines/laravel-livewire.md` inside the plugin directory. When the target is a Laravel + Livewire repo, that file is the project's mandatory convention layer and every generated artifact points at it.
+The harness ships an opinionated convention layer under `guidelines/` inside the plugin directory (`<plugin-root>`, the directory this command file lives two levels under): `laravel.md`, plus `livewire.md` for Livewire projects. When the target is a Laravel repo, their composition is the project's mandatory convention layer and every generated artifact points at it.
 
-Detect the stack from the manifest — both matches required:
+`scripts/sync-guidelines.sh` detects the stack from `composer.json` and composes the files — never re-implement either here:
 
 ```bash
-test -f <target>/composer.json \
-  && grep -q '"laravel/framework"' <target>/composer.json \
-  && grep -q '"livewire/livewire"' <target>/composer.json
+"<plugin-root>/scripts/sync-guidelines.sh" --source "<plugin-root>" --check <target>
 ```
 
-No `composer.json`, or either dependency missing → `guidelines.status = none`; skip the rest of this step and generate as usual.
-
-Match → resolve the plugin's guidelines file (`<plugin-root>/guidelines/laravel-livewire.md`, the directory this command file lives two levels under) and:
-
-| `<target>/docs/agents/coding_guidelines.md` | Action | `guidelines.status` |
+| `STACK` record | `composer.json` requires | Composed from |
 |---|---|---|
-| absent | copy the guidelines body there (strip the `harness-meta` block), no ownership banner | `seeded` |
-| exists | leave it byte-for-byte alone | `present` |
+| `laravel` | `laravel/framework` | `laravel.md` |
+| `laravel-livewire` | `laravel/framework` + `livewire/livewire` | `laravel.md` + `livewire.md` |
+| `none` | neither | — |
 
-```bash
-mkdir -p <target>/docs/agents
-awk '/^<!-- harness-meta:start -->$/{skip=1;next} /^<!-- harness-meta:end -->$/{skip=0;drop=1;next} skip{next} drop&&/^$/{drop=0;next} {drop=0;print}' \
-  <plugin-root>/guidelines/laravel-livewire.md > <target>/docs/agents/coding_guidelines.md
-```
+`STACK none` → `guidelines.status = none`; skip the rest of this step and generate as usual.
+
+Otherwise, by the `GUIDELINES` record:
+
+| `--check` status | Action | `guidelines.status` |
+|---|---|---|
+| `absent` | run the same line without `--check`: it writes the composed body (harness-meta blocks stripped), no ownership banner | `seeded` |
+| `current` / `outdated` / `modified` | leave the file byte-for-byte alone — refreshing it is `/jharness:update`'s job | `present` |
 
 The copy carries **no** `/ai-context` banner on purpose: it is hand-written content, classified `not-owned` by the inspector in step 3, so the docs writer skips it and no later run ever clobbers it. Never run the copy with `--adopt` semantics — `--adopt` must not overwrite a seeded or hand-written `coding_guidelines.md`.
 
-Carry `guidelines = {stack: laravel-livewire, path: docs/agents/coding_guidelines.md, status: seeded|present}` into steps 4–6.
+Carry `guidelines = {stack: <STACK>, path: docs/agents/coding_guidelines.md, status: seeded|present}` into steps 4–6.
 
 ### 3 — Inspect (delegate to `ai-context-inspector`)
 
@@ -163,7 +161,8 @@ Emit one table:
 | `<path>` | `created` / `updated` / `unchanged` / `adopted` / `skipped (N/A)` / `skipped (not owned)` / `disabled` |
 
 After the table:
-- `guidelines.status = seeded` → 1 line: the Laravel + Livewire convention layer was copied to `docs/agents/coding_guidelines.md`; it is hand-written, never regenerated, edit it freely.
+- `guidelines.status = seeded` → 1 line: the `<stack>` convention layer was copied to `docs/agents/coding_guidelines.md`; it is hand-written, never regenerated, edit it freely.
+- `guidelines.status = present` → 1 line: `/jharness:update` pulls upstream revisions of the convention layer (unedited copies refresh automatically; edited ones are never overwritten without asking).
 - Seeded legacy guidance, when any (origin + destination section).
 - `skipped (not owned)` entries → 1 line: re-run with `--adopt` to take ownership.
 - All unchanged → `No changes — tree already in sync.`
@@ -175,7 +174,7 @@ After the table:
 - **Reality only** — `.spec/`, `.specs/`, `spec/` are never read or cited by any step of this pipeline.
 - **Never invent** — applies transitively; agents cite evidence or emit the N/A shape.
 - **Never clobber hand-written files** without `--adopt`.
-- **Stack guidelines win** — on a Laravel + Livewire target, `docs/agents/coding_guidelines.md` is the harness convention layer: seeded once when absent, never regenerated, never adopted, and cited as mandatory in `AGENTS.md` §2 and `CLAUDE.md`.
+- **Stack guidelines win** — on a Laravel target (with or without Livewire), `docs/agents/coding_guidelines.md` is the harness convention layer: seeded once when absent, never regenerated, never adopted, and cited as mandatory in `AGENTS.md` §2 and `CLAUDE.md`.
 - **Preserve foreign marker blocks** — third-party `<tag>...</tag>` regions (e.g. `<laravel-boost-guidelines>`) in owned files are re-appended verbatim on regeneration, never reworded, never seeded; size checks ignore them.
 - **No git writes** — never stage, commit, or reset; the developer commits manually.
 - **No secrets** — `.env` is never read; env var names come from `.env.example` only.
