@@ -59,6 +59,9 @@ Projects using Livewire also follow the Livewire guidelines, which build on thes
     controllers or jobs.
 15. **Test everything, backend features first.** Feature tests of backend behavior
     come before anything else; unit, gateway and frontend tests follow.
+16. **Code explains itself; comments are for shenanigans.** Names and types carry
+    the meaning. A comment appears only when the code cannot say it — a workaround,
+    a vendor quirk, a hidden ordering, a deliberate oddity someone would "fix".
 
 ---
 
@@ -108,7 +111,7 @@ class PublishPost
     public function handle(Post $post, PublishedAt $at): Post
     {
         return DB::transaction(function () use ($post, $at) {
-            $post->publish($at);                       // model enforces + persists
+            $post->publish($at);
             $post->author->increment('published_count');
             $this->events->dispatch(new PostPublished($post));
 
@@ -221,7 +224,7 @@ class MonthlyRevenueByRegion
     public function handle(Period $period): Collection
     {
         return Invoice::query()
-            ->issuedWithin($period)                              // scope, not whereRaw
+            ->issuedWithin($period)
             ->selectRaw('region_id, SUM(total_cents) AS revenue_cents')
             ->groupBy('region_id')
             ->get()
@@ -270,7 +273,7 @@ class Post extends Model
         throw_if($this->body === '', new CannotPublishEmptyPost($this->id));
 
         $this->update([
-            'status'       => PostStatus::Published,   // mutator writes post_status_id
+            'status'       => PostStatus::Published,
             'published_at' => $at,
         ]);
     }
@@ -280,7 +283,6 @@ class Post extends Model
         return $this->status === PostStatus::Published;
     }
 
-    // enum <-> lookup row; see "Enums and lookup tables"
     protected function status(): Attribute
     {
         return Attribute::make(
@@ -1096,7 +1098,7 @@ class ReceivePaymentWebhook
                 return $payment;                       // not ours to act on, or a redelivery
             }
 
-            $payment->markPaid($update->occurredAt);   // model guards + persists
+            $payment->markPaid($update->occurredAt);
             PaymentPaid::dispatch($payment);           // delivered after commit
 
             return $payment;
@@ -1297,6 +1299,39 @@ class AlreadyPublished extends DomainException
 
 ---
 
+## Comments
+
+**No comment is the default.** Class, method and variable names, plus the types,
+say what the code does. A comment that repeats them is noise, and it drifts from
+the code it describes.
+
+A comment earns its place only when it explains **why** something surprising is
+there — something a careful reader would otherwise get wrong, or "fix":
+
+- a workaround for a framework, package or vendor bug — link the issue;
+- a vendor quirk: a field that lies, an undocumented limit, a format that differs
+  from the docs;
+- ordering or timing that matters and is not visible in the code
+  (`// delivered after commit`);
+- a branch that looks wrong but is deliberate
+  (`// not ours to act on, or a redelivery`);
+- a container binding that cannot be avoided — say why (see *Construction*).
+
+Rules:
+
+- **Never narrate the code.** `// save the post` above `$post->save()` says nothing.
+- **Needing a comment to explain *what* means a missing name.** Rename the
+  variable, or extract a method named after the comment.
+- **No docblocks restating the signature** — no `@param Post $post`, no
+  `@return void`. Types live in the signature. A docblock is allowed only for what
+  PHP types cannot express, such as `@return Collection<int, RegionRevenue>`.
+- **No commented-out code.** Delete it; git remembers.
+- **No section banners, author tags or changelogs** in code.
+- **No `TODO` without a linked issue.**
+- **Keep a justified comment short** — one line, next to the line it explains.
+
+---
+
 ## Testing
 
 Pest. **Test everything — in priority order.** Coverage goes first to what matters:
@@ -1428,6 +1463,10 @@ Rules:
 | a write covered only by `assertSee` | assert state, events and exceptions first, then the page |
 | a feature test hitting a real vendor | swap the gateway factory, or `Http::fake()` |
 | static finders on models | scope + call site, or an Action |
+| `// publish the post` above `$post->publish($at)` | nothing — the name already says it |
+| a comment explaining *what* a block does | a better name, or an extracted method |
+| `@param` / `@return` docblocks repeating the types | the typed signature |
+| commented-out code | delete it; git remembers |
 
 ---
 
@@ -1468,3 +1507,4 @@ Rules:
 - [ ] FormRequests hold only shape rules.
 - [ ] Domain exceptions are typed, per-rule, and render themselves.
 - [ ] Every change has a tier-1 backend feature test asserting state, events or exceptions; frontend assertions come on top, never instead.
+- [ ] No comments narrating code, no docblocks repeating types, no commented-out code; every remaining comment explains a non-obvious why.
