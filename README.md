@@ -2,7 +2,7 @@
 
 > 🇧🇷 [Documentação em português](README.pt-BR.md)
 
-A [Claude Code](https://claude.com/claude-code) plugin with commands, agents, and scripts that take a project from idea to implementation in a structured way: formal specification, phased planning, and autonomous execution with mechanical validation — while keeping a human in control at every decision point.
+A [Claude Code](https://claude.com/claude-code) and [GitHub Copilot CLI](https://docs.github.com/en/copilot/concepts/agents/about-copilot-cli) plugin with commands, agents, and scripts that take a project from idea to implementation in a structured way: formal specification, phased planning, and autonomous execution with mechanical validation — while keeping a human in control at every decision point.
 
 The harness is **stack-agnostic**: language, framework, commands, and conventions are defined by the project's own documents (`AGENTS.md`, `CLAUDE.md`, the `.spec/` chain), never by the harness.
 
@@ -38,13 +38,29 @@ Cross-cutting: **`/ai-context`** keeps the context tree (`AGENTS.md`, `CLAUDE.md
 
 ## Installation
 
-This repository is a Claude Code plugin (`.claude-plugin/plugin.json`). Install it via marketplace/local path according to your plugin setup:
+This repository is an Agent Plugins 1.0 plugin (`plugin.json`) and remains compatible with Claude Code (`.claude-plugin/plugin.json`). Install it with Copilot CLI:
+
+```
+copilot plugin install jnariai/jharness
+```
+
+Or install it from a local checkout:
+
+```
+copilot plugin install /path/to/jharness
+```
+
+For Claude Code, install it via marketplace/local path according to your plugin setup:
 
 ```
 /plugin install jharness
 ```
 
 Commands are namespaced: `/jharness:init`, `/jharness:plan`, etc. (abbreviated without the namespace throughout this document).
+
+Copilot CLI discovers the portable manifest at the repository root. Its client-specific
+commands, agents, and hooks are exposed under `com.github.copilot/`; the original
+`commands/`, `agents/`, and `hooks/` directories remain the Claude Code source layout.
 
 `ralph.sh` is a standalone bash script — copy or reference `scripts/ralph.sh` and run it directly in the target project's repository.
 
