@@ -24,17 +24,25 @@ Projects using Livewire also follow the Livewire guidelines, which build on thes
    Action class with a `handle()` method that opens the transaction and decides,
    top to bottom, everything that happens in its use case: model transitions,
    gateway calls, and the events that announce the result. Nothing else writes.
+   The Action orchestrates the write; it never performs it. `create()`, `update()`,
+   `save()`, `delete()` and `increment()` are never called from an Action.
 2. **Models are rich domain bags that persist themselves — domain rules only.**
-   The entity guards its own invariants and its own state machine, and saves. The
-   Action still owns the transaction, and owns every business rule.
+   The entity guards its own invariants and its own state machine, and saves. Every
+   write is one of its methods: a transition for a change, a named constructor for
+   birth. The Action still owns the transaction, and owns every business rule.
 3. **Value objects carry their own validity.** A `Money` that exists is a valid
    `Money`. Invalid input never becomes a VO.
-4. **Actions speak DTOs and VOs, in and out.** Every argument and every return is a
-   model, a VO or a DTO. Never an array, never loose primitives, never `bool`.
+4. **Typed shapes cross class boundaries; arrays never do.** Every public argument
+   and every return is a model, VO, DTO, enum or Collection — never a loose
+   primitive, never `bool` as a result, never `mixed`. An array is a private
+   implementation detail: fine inside a class, banned the moment it is handed to
+   another one.
 5. **Enums are always string-backed, and they own every rule.** A lookup table is
    storage — an `id` and a `label` behind a foreign key. Never logic.
 6. **Entry points validate, authorize, delegate.** Controllers, console commands
-   and Livewire components do those three things and nothing else.
+   and Livewire components do those three things and nothing else. Policies and
+   gates run **only** there, and **never inside an Action** — an Action assumes its
+   caller has already authorized.
 7. **Jobs and listeners own only their own plumbing.** Retries, backoff, uniqueness,
    overlap — then one Action call.
 8. **What happened is an event; what follows is a listener.** An Action announces a
@@ -50,9 +58,15 @@ Projects using Livewire also follow the Livewire guidelines, which build on thes
     them rare.
 11. **FormRequests are shape only.** Required, max, unique, format. Never a business
     rule.
-12. **Domain exceptions render themselves.** No error plumbing at entry points.
+12. **Domain failures are domain exceptions; HTTP is decided in `bootstrap/app.php`.**
+    An Action or a model throws a typed domain exception carrying a
+    `DomainErrorKind`; `withExceptions()` maps that kind to a status code once.
+    Never `abort()`, never an `HttpException` below the entry point, and no
+    `try`/`catch` plumbing at entry points.
 13. **Reads are Eloquent + scopes, composed in an Action.** `#[Scope]` attributes are
-    the vocabulary, raw `where` is banned, and a report gets an Action of its own.
+    the vocabulary; a bare `where()` in an Action and raw SQL (`whereRaw`) are both
+    banned. A report or specific read gets a `Get*` Action of its own, and one that
+    returns a list takes a `*Filter` DTO.
 14. **Everything typed; only DTOs and VOs are `final readonly`.** No `mixed`, no
     untyped properties, no array-shaped payloads where a VO or enum fits. Every
     other class stays open — no `final` on Actions, models, gateways, factories,
@@ -61,7 +75,10 @@ Projects using Livewire also follow the Livewire guidelines, which build on thes
     come before anything else; unit, gateway and frontend tests follow.
 16. **Code explains itself; comments are for shenanigans.** Names and types carry
     the meaning. A comment appears only when the code cannot say it — a workaround,
-    a vendor quirk, a hidden ordering, a deliberate oddity someone would "fix".
+    a vendor quirk, a hidden ordering, a rule whose reason lives outside the code,
+    a deliberate oddity someone would "fix". The only allowed docblock is one PHP
+    types cannot express: a generic (`Collection<int, Post>`) or an array shape.
+    Never a comment explaining something obvious.
 
 ---
 
@@ -75,10 +92,10 @@ Projects using Livewire also follow the Livewire guidelines, which build on thes
 | Job | `app/Jobs/*.php` | retries, backoff, timeout, uniqueness, overlap, `failed()` — then one Action call | validation, authorization, business rules |
 | Event | `app/Events/*.php` | a past-tense domain fact + its payload (model, ids, VOs) | behavior, rules, knowing its listeners |
 | Listener | `app/Listeners/*.php` | one reaction to one event: queue config — then one Action call | validation, authorization, business rules, deciding whether to react |
-| Action | `app/Actions/<Aggregate>/*.php` | every write, business rules, orchestration, transaction boundary, composing reads from scopes, reports | HTTP/UI concerns, validation of shape, raw `where`, re-checking model invariants |
+| Action | `app/Actions/<Aggregate>/*.php` | every write, business rules, orchestration, transaction boundary, composing reads from scopes, reports | authorization (`authorize()`, `Gate::`, `can()`, `auth()`), HTTP/UI concerns, shape validation (`Validator::`, `validate()`, `Rule::`), persistence calls (`create()`, `update()`, `save()`, `delete()`, `increment()`, `attach()`, `sync()`), bare `where()`, raw SQL, re-checking model invariants, `abort()` / `HttpException`, a second public method, `static` |
 | Model | `app/Models/*.php` | domain rules: its own invariants, state transitions, relations, casts, `#[Scope]` predicates, enum ⇄ lookup id mapping | business rules, cross-aggregate orchestration, events, config, static finders |
 | Value object | `app/ValueObjects/*.php` | its own validity + behavior | persistence, container access |
-| DTO | `app/Data/*Data.php` | typed transport across an Action boundary | rules, behavior, persistence |
+| DTO | `app/Data/*Data.php`, `*Result.php`, `*Filter.php` | typed transport across an Action boundary | rules, behavior, persistence |
 | Gateway | `app/Gateways/<Vendor>/*Gateway.php` | domain ⇄ vendor translation, vendor errors → domain exceptions | HTTP mechanics, retries, headers, reading config |
 | Client | `app/Gateways/<Vendor>/*Client.php` | transport: base URL, auth, headers, timeout, transport retries | domain knowledge, business rules, reading config |
 | Factory | `app/Gateways/<Vendor>/*GatewayFactory.php` | building Client + Gateway with `new` from config and runtime data (tenant) | calling the vendor, business rules |
@@ -87,7 +104,8 @@ Projects using Livewire also follow the Livewire guidelines, which build on thes
 | Lookup table | `<name>_status`, `<name>_type`, … | `id` + `label`, referenced by FK | behavior, rules, an Eloquent model |
 | Cast | `app/Casts/*.php` | VO ⇄ column mapping | rules of any kind |
 | Policy | `app/Policies/*.php` | authorization | state changes |
-| Exception | `app/Exceptions/*.php` | domain failure + how it is shown | control flow for expected branches |
+| Exception | `app/Exceptions/*.php` | domain failure + its `DomainErrorKind` | status codes, `Request`, `render()`, control flow for expected branches |
+| Exception mapping | `bootstrap/app.php` `withExceptions()` | `DomainErrorKind` → status code + response shape | domain knowledge, per-class special cases |
 
 Layout is plain Laravel: grouped by type under `app/`, one subfolder per
 aggregate inside `Actions/`. No `Domain/`, no `src/Modules/`.
@@ -96,8 +114,8 @@ aggregate inside `Actions/`. No `Domain/`, no `src/Modules/`.
 
 ## Actions
 
-One class, one intent. `handle()` is the only public entry point, and it opens
-the transaction.
+One class, one intent. `handle()` is the only public method on the class, and it
+opens the transaction.
 
 ```php
 namespace App\Actions\Post;
@@ -112,7 +130,7 @@ class PublishPost
     {
         return DB::transaction(function () use ($post, $at) {
             $post->publish($at);
-            $post->author->increment('published_count');
+            $post->author->countPublishedPost();
             $this->events->dispatch(new PostPublished($post));
 
             return $post;
@@ -131,9 +149,18 @@ called, which events and jobs go out — and in what order.
 - **Nothing writes behind its back.** Controllers, console commands, components,
   jobs and listeners never call `save()`, `update()`, `create()` or `delete()`.
   Observers and model events never write either.
+- **The Action does not write either — it says which writes happen, and in what
+  order.** `save()`, `update()`, `create()`, `delete()`, `increment()`, `attach()`
+  and `sync()` never appear in `handle()`. Every line that changes state is a call
+  to a method on the entity that owns the invariant: a transition for a change
+  (`$post->publish($at)`), a named constructor for birth (`Post::draft(...)`). If
+  an Action needs a persistence call there is no method for, the missing method is
+  on the model — not an exception to this rule.
 - **The model executes, the Action orchestrates.** `$post->publish($at)` changes
   and persists one entity; deciding that publishing also bumps a counter and
-  notifies followers is the Action's job.
+  notifies followers is the Action's job. The counter bump is still the other
+  entity's method (`$author->countPublishedPost()`), never `increment()` in
+  `handle()`.
 - **An Action may compose other Actions** when a use case is made of smaller ones:
   inject them and call their `handle()`. The outermost Action owns the
   transaction; the inner ones join it.
@@ -150,6 +177,18 @@ Rules:
   `RefundInvoice`. Never `PostService`, never `PostManager`.
 - **`handle()` always**, even for a one-liner. Uniform entry point means the class
   can move to a job, a command, or a queue without a rename.
+- **`handle()` is the only public method.** Not the only *entry point* — the only
+  one. Everything else the Action needs is `private`. A second public method is a
+  second responsibility: a `withDryRun()` toggle, a `preview()` variant or a
+  `handleMany()` bulk form each mean a second Action, named after its own intent.
+  One public method is also what makes the class greppable — every caller of a use
+  case is a call to `handle()`.
+- **Never `static`.** `handle()` is an instance method, always called on an injected
+  instance. No `PublishPost::run(...)`, no static helpers on the class, no static
+  state. A static Action cannot take constructor dependencies, cannot be swapped in
+  a test, and hides its collaborators from the signature. (Named constructors on
+  models and DTOs are static for a different reason and stay so — see *Models* and
+  *Action boundaries*.)
 - **`DB::transaction()` wraps the whole body of a write Action**, including
   single-write ones. Consistency beats micro-optimizing one query.
 - **Dependencies via constructor injection**, typed and `readonly`.
@@ -204,27 +243,33 @@ class SendOverdueReminders
 
 - **Every predicate is a scope**, declared with the `#[Scope]` attribute on the
   model (see Models). A bare `->where('status_id', 3)` in an Action means a scope
-  is missing.
-- **No raw `where`.** `whereRaw`, `havingRaw`, string conditions and interpolated
-  SQL are out. The builder covers it: `whereBelongsTo`, `whereRelation`,
-  `whereHas`, `whereIn`, `whereBetween`, `whereNull`, `when()`.
+  is missing. This is about the Action: inside a scope body, the builder's own
+  `where` family is exactly the right tool.
+- **Scope bodies use the builder, never raw SQL.** `whereRaw`, `havingRaw`, string
+  conditions and interpolated SQL are out; the builder covers it with
+  `whereBelongsTo`, `whereRelation`, `whereHas`, `whereIn`, `whereBetween`,
+  `whereNull` and `when()`.
+- **Ordering that carries meaning is a scope too** — `#[Scope] latestFirst()`,
+  `#[Scope] byPriority()`. A mechanical `orderBy()` on a column the caller names
+  may stay in the Action; "newest first" is domain vocabulary and belongs on the
+  model.
 - **Eager load explicitly** (`with()`); never rely on lazy loading in an Action.
-- The Action still returns models or VOs — never a `Builder`. Handing a builder to
-  a caller leaks the query out of the layer that owns it.
+- The Action still returns models, VOs or a paginator — never a `Builder`. Handing
+  a builder to a caller leaks the query out of the layer that owns it.
 
-**2 — Reports and specific reads: wrapped in their own Action.**
+**2 — Reports and specific reads: wrapped in their own `Get*` Action.**
 
 When the query stops being a filtered list of an aggregate — a report, a cross-table
 aggregate, a grouped total, a derived column, a projection into a shape that is not
-a model — it gets an Action of its own, named after what it answers.
+a model — it gets an Action of its own, named `Get` plus what it answers.
 
 ```php
-class MonthlyRevenueByRegion
+class GetMonthlyRevenueByRegion
 {
-    public function handle(Period $period): Collection
+    public function handle(GetMonthlyRevenueByRegionFilter $filter): Collection
     {
         return Invoice::query()
-            ->issuedWithin($period)
+            ->issuedWithin($filter->period)
             ->selectRaw('region_id, SUM(total_cents) AS revenue_cents')
             ->groupBy('region_id')
             ->get()
@@ -239,13 +284,79 @@ class MonthlyRevenueByRegion
 - **A raw expression is allowed only here**, and only for what the builder cannot
   express — aggregates, window functions, database-specific projections. Filtering
   still goes through scopes, and every value is a binding, never interpolation.
-- **Name it after the answer**, not the query: `MonthlyRevenueByRegion`,
-  `TopCustomersByLifetimeValue`. Never `InvoiceReportAction`.
+- **Name it `Get` plus the answer**, not the query: `GetMonthlyRevenueByRegion`,
+  `GetTopCustomersByLifetimeValue`. Never `InvoiceReportAction`, never
+  `InvoiceQuery`. The prefix is what separates reads from writes in
+  `app/Actions/<Aggregate>/`; `Get` is the verb, so verb + noun still holds.
 - **Return VOs or dedicated read objects**, not `stdClass` rows and not arrays.
 - One report Action per report. Do not add `$groupBy` flags to make one class serve
   five reports.
 
 A read Action has no `DB::transaction()`. That absence is the signal it is a read.
+
+**Every `Get*` Action that returns a list takes one `*Filter` DTO.**
+
+The filter is named after its Action — `GetMonthlyRevenueByRegion` →
+`GetMonthlyRevenueByRegionFilter` — and carries everything that shapes the result:
+the report's own filters, the search term, and pagination. One argument, however
+many knobs the report grows.
+
+```php
+namespace App\Data;
+
+final readonly class GetMonthlyRevenueByRegionFilter
+{
+    public function __construct(
+        public Period $period,
+        public ?RegionId $region = null,
+        public ?SearchTerm $search = null,
+    ) {}
+
+    public static function fromRequest(MonthlyRevenueRequest $request): self
+    {
+        // ...
+    }
+}
+```
+
+- **It is a DTO, not a VO** — a typed envelope with no behavior. It lives in
+  `app/Data/` and ends in `Filter`; its fields are VOs, enums and models, never
+  raw strings or ints. See *Action boundaries*.
+- **Pagination is a VO on the filter**, not two loose ints. `Pagination` guards its
+  own validity — page size positive, within a maximum — the way any VO does:
+
+  ```php
+  final readonly class GetOverdueInvoicesFilter
+  {
+      public function __construct(
+          public Tenant $tenant,
+          public Pagination $pagination,
+          public ?SearchTerm $search = null,
+      ) {}
+  }
+
+  class GetOverdueInvoices
+  {
+      public function handle(GetOverdueInvoicesFilter $filter): LengthAwarePaginator
+      {
+          return Invoice::query()
+              ->forTenant($filter->tenant)
+              ->overdue()
+              ->latestFirst()
+              ->with('customer')
+              ->paginate($filter->pagination->perPage());
+      }
+  }
+  ```
+- **A paginated read returns the paginator.** `paginate()` inside a `Get*` Action
+  is the one sanctioned implicit request read: Laravel resolves the page number
+  from the query string itself, which is why `Pagination` carries size and not
+  page. The no-`request()` rule (see *Actions*) is about the Action asking for its
+  input, and this is not that. A report that answers with a bounded, grouped set —
+  twelve months, one row per region — returns a `Collection` and its filter has no
+  `Pagination` field.
+- **A `Get*` that returns a single model or a scalar answer takes no filter** — its
+  arguments are the models and VOs that identify what is being asked.
 
 ---
 
@@ -345,9 +456,19 @@ Rules:
 - **Invariants only — never use-case policy.** A transition method never reads
   config, never queries another aggregate, never asks who the actor is, never checks
   a quota. If a guard needs any of that, the guard belongs in the Action.
-- **The method persists.** A self-contained transition may `save()`/`update()`
+- **The method persists.** A self-contained transition `save()`s or `update()`s
   itself; the surrounding Action provides the transaction so multiple transitions
-  still commit as one unit.
+  still commit as one unit. The model is the *only* place these calls appear.
+- **Birth is a named constructor.** A transition cannot create the entity it
+  guards, so creation is a static factory on the model — `Post::draft(User $author,
+  Title $title, Body $body): self` — which checks the invariants that must hold
+  from the first row, inserts, and returns the model. The Action calls it; the
+  Action never calls `create()`.
+- **A named constructor collapses into a DTO once it passes three arguments.**
+  `Post::fromData(CreatePostData $data): self`. Same rule as Action signatures.
+- **Named constructors are not static finders.** "No static finders" bans query
+  building hidden behind a static method (`Post::findPublishedBySlug()`); it does
+  not ban `Post::draft()`, which writes one row it fully controls.
 - **Casts and relations are the model's job.** Every column with meaning gets a
   cast — enum, VO cast, `immutable_datetime`, `decimal:2`.
 - **The model owns the enum ⇄ lookup mapping**, and it is the only place that reads
@@ -359,7 +480,8 @@ Rules:
   scope that should exist is missing. If a scope needs `whereRaw`, the builder
   method that replaces it exists — find it.
 - **No static finders.** `Post::findPublishedBySlug()` is a scope plus a call site,
-  or an Action. Keep query building out of static methods.
+  or a `Get*` Action. Keep query *building* out of static methods — named
+  constructors, which build no query, are the exception above.
 - **No cross-aggregate orchestration.** If a method needs to touch another
   aggregate or dispatch an event chain, that belongs in an Action.
 - **No events, no notifications, no jobs from the model** — and no model events
@@ -369,6 +491,64 @@ Rules:
   cannot decide from itself is not its rule.
 - **No `$fillable` wildcards** — declare `$fillable` or `$guarded = []`
   deliberately and let FormRequests be the input gate.
+
+### Relations: when a pivot becomes a model
+
+A `belongsToMany` is fine while the join table is genuinely nothing but a link.
+The moment the link itself has something to say, it stops being plumbing and
+becomes an entity, with its own model and its own name.
+
+**Promote the pivot to a model when any of these is true:**
+
+- it carries a column beyond the two foreign keys — `role`, `status`, `joined_at`,
+  `expires_at`, `position`
+- there is a rule about the link itself — an invariant, a transition, "a family has
+  exactly one owner"
+- the link has a lifecycle: created, revoked, expired — rather than merely existing
+  or not
+- it needs a policy, a factory, a domain event, or an enum-backed column
+- anything references the link by id
+
+Then `Family hasMany FamilyMember`, `User hasMany FamilyMember`, and `FamilyMember
+belongsTo` both. The table is named after the entity — `family_members`, not
+Laravel's alphabetical `family_user` — and the model gets everything any model
+gets: casts, `#[Scope]` predicates, transition methods guarding invariants, a
+factory, a policy when it needs one. Membership changes are its methods:
+`FamilyMember::join(User $user, Family $family, FamilyRole $role)`,
+`$member->promote($role)`, `$member->leave($at)`.
+
+```php
+class FamilyMember extends Model
+{
+    public static function join(User $user, Family $family, FamilyRole $role): self
+    {
+        throw_if($family->hasMember($user), new AlreadyAMember($family->id, $user->id));
+
+        return self::create([
+            'user_id'   => $user->id,
+            'family_id' => $family->id,
+            'role'      => $role,
+        ]);
+    }
+
+    public function promote(FamilyRole $role): void
+    {
+        throw_if($this->role === $role, new AlreadyInRole($this->id, $role));
+
+        $this->update(['role' => $role]);
+    }
+}
+```
+
+**`withPivot` and `->pivot->` are the tell.** Reaching for either means the rule
+above already fired and was ignored: you are asking a `Pivot` — a model with no
+scopes, no transitions, no factory and no policy — to carry domain data. Both are
+banned outright; grepping them should return nothing.
+
+**A surviving `belongsToMany` still writes through a model method.** Even a pure
+link is a state change, so it goes through the owning entity —
+`$family->admitMember($user)`, which wraps `attach()` inside the model — never
+`attach()`, `detach()` or `sync()` in an Action.
 
 ---
 
@@ -490,6 +670,81 @@ one of three things:
 Never a primitive that means something (`string $cpf`, `int $cents`), never an
 associative array, never `bool` as a result, never `mixed`.
 
+### Arrays stay inside one class
+
+This one is not about Actions — it holds for **every class in the codebase**.
+
+**An array is a private implementation detail.** Inside a class it is a fine tool:
+a local variable, a private property, an argument or return of a `private` or
+`protected` method. Both ends are the same class, the shape never escapes, and one
+test covers it.
+
+**The moment an array would travel to another class, it is banned.** Public and
+constructor arguments, public returns, DTO fields, event payloads, job and listener
+constructors, gateway inputs and outputs — all of those are typed: a model, a VO, a
+DTO, an enum, or a Collection.
+
+```php
+// Fine — the array never leaves the class
+class BuildRevenueReport
+{
+    public function handle(Period $period): RevenueReport
+    {
+        $rows = $this->groupByRegion($period);   // private, array in and out
+
+        return RevenueReport::fromRegions($rows);
+    }
+
+    /** @return array<string, int> */
+    private function groupByRegion(Period $period): array { /* … */ }
+}
+```
+
+```php
+// Banned — the array crosses into another class
+$publish->handle(['post_id' => 12, 'at' => '2026-01-01']);   // no
+public function handle(array $data): array                   // no
+new PaymentPaid(['id' => $id, 'amount' => $cents]);          // no
+$gateway->charge(['amount' => 1000, 'currency' => 'BRL']);   // no
+```
+
+```php
+// Typed instead
+$publish->handle($post, PublishedAt::now());
+$gateway->charge(Money::fromCents(1000, Currency::BRL));
+```
+
+Two narrow exceptions, both of which keep the array from travelling:
+
+- **A framework contract that is an array by definition** — `rules()`, `casts()`,
+  `$fillable`, `middleware()`, a config file, a resource's `toArray()`. That is the
+  framework's own shape, not a domain boundary.
+- **Edge translation into a typed shape.** A DTO's or VO's named constructor may
+  take the outside world's array — `fromRow(array $row)`, `fromPayload(array $payload)`
+  — because the array dies inside that constructor. It never goes further, and
+  nothing downstream sees it. This is the same edge rule as `fromRequest()`.
+
+### Collections
+
+A Collection is allowed wherever a set of one thing crosses a boundary, and it is
+the right answer for "many Posts". **Prefer it typed:**
+
+- a generic docblock on the signature — `/** @return Collection<int, Post> */`;
+- or a dedicated collection class (`PostCollection`, an Eloquent
+  `$collection` override) when the set has behavior of its own.
+
+Rules:
+
+- **A Collection of arrays is still an array.** `Collection<int, array>` buys
+  nothing — the items are a DTO or a VO.
+- **A Collection of mixed shapes is banned.** One item type per Collection.
+- **A homogeneous list crossing a boundary is a Collection or a VO**, never
+  `array $labels`. When the list has rules of its own — a non-empty set, a maximum,
+  an ordering — it is a VO that wraps it (`PostIds`, `Labels`), not a bare
+  Collection.
+- Untyped `Collection` with no generic is tolerated only where the item type is
+  obvious from the return type of the line above it; add the docblock otherwise.
+
 ### VO or DTO?
 
 - A **value object** has invariants and behavior; it refuses to exist when invalid,
@@ -539,9 +794,10 @@ final readonly class RegisterCustomerData
   }
   ```
 
-- **DTOs live in `app/Data/` and end in `Data`** (or in a `Result` for outputs).
-  They are `final readonly`, with promoted public properties — together with VOs,
-  the only `final` classes in the codebase.
+- **DTOs live in `app/Data/` and end in `Data`, `Result` or `Filter`** — `Data` for
+  an input, `Result` for an output, `Filter` for the input of a `Get*` Action that
+  returns a list. They are `final readonly`, with promoted public properties —
+  together with VOs, the only `final` classes in the codebase.
 - **No behavior creep.** The moment a DTO grows a rule, that rule belongs to a VO,
   the model, or the Action — not to the envelope.
 
@@ -757,7 +1013,7 @@ class PublishScheduledPostsCommand extends Command
 ```
 
 - **Actions by method injection** on `handle()`, same as everywhere else.
-- The command does not query — a read Action supplies what it iterates.
+- The command does not query — a `Get*` Action supplies what it iterates.
 - Exit codes are meaningful: `SUCCESS`, `FAILURE`, `INVALID`.
 - Progress bars and `$this->info()` are presentation, and are the only extra thing
   a command is allowed to carry.
@@ -948,8 +1204,9 @@ Rules:
   A vendor field name never leaves the Gateway; a domain type never enters the Client.
 - **The Client is dumb on purpose.** It knows how to talk, not what is being said.
   Arrays in, arrays out — that is the one place raw shapes are allowed.
-- **Vendor failures become domain exceptions** in the Gateway, and those exceptions
-  render themselves like any other. An Action never catches a `RequestException`.
+- **Vendor failures become domain exceptions** in the Gateway, carrying a
+  `DomainErrorKind` like any other — usually `Unavailable`. An Action never catches
+  a `RequestException`, and a Gateway never `abort()`s.
 - **Transport retry belongs to the Client** (`->retry()`), business retry to the job.
   Two different concerns that happen to share a word.
 - **A gateway whose construction needs config or runtime data is built by its
@@ -1239,6 +1496,13 @@ one thing — is the input *well-formed* — and nothing else.
 The Action never re-checks shape, and a FormRequest never encodes a business
 rule. If a rule needs a DB lookup beyond `unique`, it is a business rule.
 
+**No validator of any kind runs inside an Action.** `Validator::make()`,
+`$this->validate()`, `Rule::` and a `FormRequest` type-hint never appear in
+`app/Actions/`. By the time input reaches `handle()` it is already VOs, enums,
+models and DTOs — shapes that cannot hold malformed data — so there is nothing
+left to validate. An Action that wants a validator is being handed primitives it
+should never have received; fix the boundary, not the Action.
+
 Jobs and listeners validate nothing: their input came from an entry point that
 already did.
 
@@ -1250,6 +1514,60 @@ Standard Laravel policies, enforced **at the entry point** — the FormRequest, 
 Livewire component, or (when a command acts for a user) `Gate::forUser()`. The
 Action assumes its caller has authorized.
 
+**Policies and gates live on the interface layer, always. Never in an Action.**
+An Action is the use case, not the door: it has no request, no session and no
+opinion about who is calling it. The same Action runs from a controller, a console
+command, a job and a test, and only the interface layer knows which actor — if any
+— is on the other side. A policy call inside `handle()` breaks every non-HTTP
+caller and hides the check from the layer that is reviewed for it.
+
+```php
+// Never — the Action asking who the caller is
+class PublishPost
+{
+    public function handle(Post $post, PublishedAt $at): Post
+    {
+        Gate::authorize('publish', $post);      // no
+        if (! auth()->user()->can('publish', $post)) { /* … */ }  // no
+        if (auth()->user()->isEditor()) { /* … */ }               // no
+
+        // …
+    }
+}
+```
+
+```php
+// Always — the entry point authorizes, the Action just runs
+class PublishPostRequest extends FormRequest
+{
+    public function authorize(): bool
+    {
+        return $this->user()->can('publish', $this->route('post'));
+    }
+}
+```
+
+Nothing in `app/Actions/`, `app/Models/`, `app/Jobs/`, `app/Listeners/` or
+`app/Gateways/` ever calls `Gate::`, `authorize()`, `can()`, `auth()` or
+`request()`. Grepping those calls outside `app/Http/`, `app/Livewire/` and
+`app/Console/` should return nothing. The same grep covers shape validation —
+`Validator::`, `validate()`, `Rule::` and any `FormRequest` import — which is the
+entry point's job for exactly the same reason: the Action has no request to
+validate, and its caller may not be HTTP at all. It covers `abort()`,
+`abort_if()`, `abort_unless()` and every `HttpException` for the same reason again
+— a 403 is a response, and the layer below the entry point has no response to
+give. See *Errors*.
+
+**When the "permission" is really a business rule, it is not a policy.** "Only an
+editor may publish" is authorization and belongs to the policy; "a tenant on the
+free plan cannot publish a fourth post" is a business rule and belongs in the
+Action, as a domain exception — not as a policy, and not as a gate. If the check
+needs a quota, a config value or another aggregate, it is a rule, and the actor
+is irrelevant to it.
+
+- If an Action genuinely needs to know *who* acted — an audit trail, an
+  `approved_by` column — the actor arrives as a typed argument (`User $actor`, or
+  a VO), passed in by the entry point. Receiving the actor is not authorizing it.
 - One policy per model, methods named after the intent (`publish`, `refund`), not
   only the CRUD verbs.
 - Routes also carry middleware (`auth`, `can:`), so an unauthenticated hit never
@@ -1267,8 +1585,8 @@ Action assumes its caller has authorized.
 
 ## Errors
 
-Domain failures are typed exceptions that know how they are presented. Entry points
-carry no `try`/`catch`.
+Domain failures are typed exceptions that say **what broke**, never **what the HTTP
+response should be**. Entry points carry no `try`/`catch`.
 
 ```php
 namespace App\Exceptions;
@@ -1280,6 +1598,11 @@ class AlreadyPublished extends DomainException
         parent::__construct("Post {$postId} is already published.");
     }
 
+    public function kind(): DomainErrorKind
+    {
+        return DomainErrorKind::Conflict;
+    }
+
     public function userMessage(): string
     {
         return __('This post has already been published.');
@@ -1287,15 +1610,50 @@ class AlreadyPublished extends DomainException
 }
 ```
 
-- The base `App\Exceptions\DomainException` implements `render(Request $request)`
-  once: a `422` JSON body with `userMessage()` for API calls, otherwise a redirect
-  back with the message flashed and the input kept. One binding, one place to change
-  it. (Livewire presentation: see the Livewire guidelines.)
+- **The exception states its kind, not its status code.** `App\Exceptions\DomainException`
+  declares `kind(): DomainErrorKind` and `userMessage(): string`, and nothing else.
+  `DomainErrorKind` is a string-backed enum — `Conflict`, `NotFound`, `Forbidden`,
+  `Invalid`, `Unavailable` — and it is the whole vocabulary the domain has for
+  failure.
+- **`bootstrap/app.php` turns a kind into a response**, once, for every domain
+  exception in the codebase:
+
+  ```php
+  ->withExceptions(function (Exceptions $exceptions) {
+      $exceptions->render(function (DomainException $e, Request $request) {
+          $status = match ($e->kind()) {
+              DomainErrorKind::Conflict    => 409,
+              DomainErrorKind::NotFound    => 404,
+              DomainErrorKind::Forbidden   => 403,
+              DomainErrorKind::Invalid     => 422,
+              DomainErrorKind::Unavailable => 503,
+          };
+
+          return $request->expectsJson()
+              ? response()->json(['message' => $e->userMessage()], $status)
+              : back()->withInput()->with('error', $e->userMessage());
+      });
+  })
+  ```
+
+  Adding an exception class does not touch this file — only adding a *kind* does.
+  (Livewire presentation: see the Livewire guidelines.)
+- **No `render()` on a domain exception, and no `Request` in `app/Exceptions/`.**
+  An exception that knows about JSON, redirects or status codes has HTTP knowledge
+  in the one layer guaranteed to be reached from a console command, a job and a
+  test.
+- **Never `abort()`, `abort_if()`, `abort_unless()`, or any `HttpException`** —
+  `NotFoundHttpException`, `AccessDeniedHttpException`, `ValidationException` —
+  inside `app/Actions/`, `app/Models/`, `app/Jobs/`, `app/Listeners/` or
+  `app/Gateways/`. They are an HTTP response smuggled into the domain: the same
+  code path that returns a clean 403 in a controller produces an unhandled
+  exception in a queue worker.
 - **One exception class per rule**, named after the rule, carrying the ids that
   explain it. No generic `BusinessException` with a string.
 - Exceptions are for **broken invariants**, not for expected branches. "No results"
-  is an empty collection; "not found" is route model binding's 404.
-- Anything without a presentation bubbles to the Laravel handler and is a bug.
+  is an empty collection; "not found" for a URL is route model binding's 404, raised
+  at the boundary — not `DomainErrorKind::NotFound` thrown from an Action.
+- Anything without a kind bubbles to the Laravel handler and is a bug.
 
 ---
 
@@ -1304,6 +1662,15 @@ class AlreadyPublished extends DomainException
 **No comment is the default.** Class, method and variable names, plus the types,
 say what the code does. A comment that repeats them is noise, and it drifts from
 the code it describes.
+
+There are exactly **two** things a comment is allowed to be:
+
+1. **A shenanigan note** — the *why* behind something surprising.
+2. **A docblock carrying a type PHP cannot express** — a generic or an array shape.
+
+Everything else gets deleted in review.
+
+### 1. Shenanigans
 
 A comment earns its place only when it explains **why** something surprising is
 there — something a careful reader would otherwise get wrong, or "fix":
@@ -1315,20 +1682,72 @@ there — something a careful reader would otherwise get wrong, or "fix":
   (`// delivered after commit`);
 - a branch that looks wrong but is deliberate
   (`// not ours to act on, or a redelivery`);
+- a complex rule whose reason lives **outside** the code — a contract clause, a
+  tax or legal rule, a negotiated agreement. The code shows the formula; the
+  comment says where the number came from
+  (`// 2.9% + 30¢ — Stripe's US card rate, contract §4`);
 - a container binding that cannot be avoided — say why (see *Construction*).
 
-Rules:
+The test: **could a competent reader work this out from the code alone?** If yes,
+no comment. If they would have to open a contract, a vendor changelog or a bug
+tracker to know why the line is like that, write the comment.
+
+```php
+// Never — the code already says all of this
+// publish the post
+$post->publish($at);
+
+// set the status to published
+$this->status = PostStatus::Published;
+```
+
+```php
+// Always — the reason is not in the code and cannot be
+// Vendor sends `amount` in cents for cards, in whole units for boleto (undocumented).
+$amount = $method === 'card' ? $raw / 100 : $raw;
+```
+
+### 2. Docblocks
+
+The signature holds the types. A docblock exists **only** where PHP's type system
+runs out:
+
+```php
+/** @return Collection<int, RegionRevenue> */
+public function handle(Period $period): Collection
+
+/** @param list<string> $labels */
+public function seed(array $labels): void
+
+/** @param array{driver: string, region: string, timeout: int} $config */
+public function __construct(array $config)
+```
+
+- Generics: `Collection<int, Post>`, `LengthAwarePaginator<Post>`.
+- Array shapes: `array{...}`, `list<T>`, `array<string, T>` — the shape a bare
+  `array` hides. These appear **only where an array is legal at all** (see *Arrays
+  stay inside one class*): a private or protected method, a private property, a
+  framework-contract method, or a named constructor translating the outside world.
+  A public signature with an array to document is the wrong signature — it wants a
+  DTO, a VO or a Collection, not a better docblock.
+- Nothing else. No `@param Post $post`, no `@return void`, no `@throws` for a
+  documented domain exception, no description line repeating the method name.
+
+### Rules
 
 - **Never narrate the code.** `// save the post` above `$post->save()` says nothing.
+- **Never state the obvious.** No comment on a getter, a constructor assignment, a
+  `return`, an early guard, a `match` arm, a migration column, a config key or a
+  test's `arrange` / `act` / `assert` steps. A comment above obvious code is worse
+  than no comment: it is another line to keep true.
 - **Needing a comment to explain *what* means a missing name.** Rename the
   variable, or extract a method named after the comment.
-- **No docblocks restating the signature** — no `@param Post $post`, no
-  `@return void`. Types live in the signature. A docblock is allowed only for what
-  PHP types cannot express, such as `@return Collection<int, RegionRevenue>`.
 - **No commented-out code.** Delete it; git remembers.
 - **No section banners, author tags or changelogs** in code.
 - **No `TODO` without a linked issue.**
 - **Keep a justified comment short** — one line, next to the line it explains.
+- **No file, class or method summary blocks.** A class named `PublishPost` does
+  not need `/** Publishes a post. */` above it.
 
 ---
 
@@ -1412,11 +1831,19 @@ Rules:
 | Do not | Do |
 |---|---|
 | `PostService`, `PostManager`, `PostRepository` | one Action per intent |
-| `save()` / `update()` / `create()` outside an Action or a model transition | the Action owns the write |
+| a second public method on an Action (`preview()`, `handleMany()`, `withDryRun()`) | a second Action, named after its own intent |
+| `PublishPost::run($post, $at)` or any `static` on an Action | an injected instance, `$publish->handle(...)` |
+| `save()` / `update()` / `create()` / `delete()` / `increment()` anywhere but a model transition or named constructor | the model performs the write, the Action orders it |
+| `Post::create([...])` or `$post->update([...])` inside an Action | `Post::draft(...)` / `$post->publish($at)` — a model method that guards its invariants |
+| `$post->author->increment('published_count')` in `handle()` | `$post->author->countPublishedPost()` |
 | a controller that queries, transforms, or persists | FormRequest → Action → response |
 | effects fired from observers or `booted()` hooks | effects ordered explicitly in the Action |
 | business logic in a job's `handle()` | retry config on the job, logic in the Action |
 | `$this->authorize()` or validation inside a job | authorize and validate at the entry point |
+| `Validator::make()`, `$this->validate()` or a `FormRequest` type-hint inside an Action | shape at the entry point; the Action receives VOs and DTOs |
+| `Gate::authorize()`, `->can()` or a role check inside an Action | the policy call in the FormRequest / Livewire component / `Gate::forUser()` |
+| `auth()->user()` or `request()` inside an Action, model or gateway | the entry point passes the actor in as a typed argument |
+| a policy method encoding a quota, plan or config rule | policy = who may act; Action = the business rule, as a domain exception |
 | a fat listener reacting with rules of its own | listener config + one Action call |
 | one method updating payment, order and invoice and sending the email | the Action dispatches `PaymentPaid`; one listener + Action per reaction |
 | an event dispatched from a model, observer, controller or component | the Action dispatches it, after commit |
@@ -1426,10 +1853,14 @@ Rules:
 | a direct call to `IssueInvoice` inside `ReceivePaymentWebhook` | `PaymentPaid` → `IssueInvoiceForPayment` listener |
 | an event dispatched again on a redelivered webhook | early return when already applied; dispatch only on the transition |
 | a vendor webhook payload reaching an Action | Gateway verifies and translates it into a domain DTO |
-| a console command building queries in a loop | read Action, then write Action |
+| a console command building queries in a loop | `Get*` Action, then write Action |
 | `DB::transaction()` in a controller or command | transaction inside `handle()` |
 | primitives crossing layers (`string $currency`) | VO or string-backed enum |
 | `handle(array $data)` / `handle(int $id, string $name, ...)` | one DTO, or models + VOs |
+| an array as a public argument, public return, DTO field, event payload or gateway input | model, VO, DTO, enum or Collection |
+| `array $labels` handed to another class | `Collection<int, Label>`, or a VO wrapping the set |
+| `Collection<int, array>` or a Collection of mixed shapes | one item type, and that item is a DTO, VO or model |
+| an untyped `Collection` on a public signature | `/** @return Collection<int, Post> */`, or a dedicated collection class |
 | an Action returning `bool` or an associative array | model, VO, or result DTO |
 | a DTO of raw strings | DTO whose fields are VOs, enums and models |
 | a DTO that grew a rule | rule on the VO, the model, or the Action |
@@ -1451,21 +1882,36 @@ Rules:
 | `scopePublished()` prefix methods | `#[Scope] protected function published()` |
 | `->whereRaw('status_id = 3')`, interpolated SQL | scope + builder methods, bindings only |
 | `->where('post_status_id', 3)` in an Action | a `#[Scope]` that names the predicate |
-| a repository or query-object layer | `Model::query()` composed in the Action |
-| an Action returning a `Builder` | return models, collections or VOs |
+| a repository or query-object layer, `InvoiceQuery`, `InvoiceReportAction` | `Model::query()` composed in a `Get*` Action |
+| a read Action named as a bare noun (`MonthlyRevenueByRegion`) | `GetMonthlyRevenueByRegion` — `Get` is what marks it a read |
+| a list `Get*` Action with four loose arguments | one `*Filter` DTO carrying filters, search and `Pagination` |
+| `int $perPage` / `int $page` on an Action signature | a `Pagination` VO field on the filter |
+| an Action returning a `Builder` | return models, collections, VOs or a paginator |
 | one report class with `$groupBy` flags | one Action per report, named after the answer |
 | `$post->status = 'published'` from outside | `$post->publish($at)` |
+| a pivot with a `role`, `status` or `joined_at` column | a `FamilyMember` model, table named after the entity |
+| `withPivot('role')`, `->pivot->role`, a `Pivot` subclass | promote the link to a model |
+| `$family->members()->attach($user->id)` in an Action | `$family->admitMember($user)`, or `FamilyMember::join(...)` |
+| `sync([1, 2, 3])` — ids crossing a boundary | a model method taking models or VOs |
 | a quota, config or actor check inside a model method | the check in the Action |
 | `config()`, `auth()` or a query inside a model | pass it in, or decide it in the Action |
 | an Action re-checking an invariant the model owns | let the model throw |
 | business rules in FormRequest `rules()` | FormRequest = shape, Action = rules |
-| `try`/`catch` around Actions at entry points | self-rendering domain exception |
+| `try`/`catch` around Actions at entry points | domain exception + `withExceptions()` mapping |
+| `abort(403)`, `abort_if()`, `throw new NotFoundHttpException` in an Action or model | a domain exception with a `DomainErrorKind` |
+| `render(Request $request)` on a domain exception | `kind()`, mapped once in `bootstrap/app.php` |
+| a status code written anywhere in `app/` | the `match` on `DomainErrorKind` in `withExceptions()` |
 | a write covered only by `assertSee` | assert state, events and exceptions first, then the page |
 | a feature test hitting a real vendor | swap the gateway factory, or `Http::fake()` |
-| static finders on models | scope + call site, or an Action |
+| static finders on models | scope + call site, or a `Get*` Action |
 | `// publish the post` above `$post->publish($at)` | nothing — the name already says it |
 | a comment explaining *what* a block does | a better name, or an extracted method |
 | `@param` / `@return` docblocks repeating the types | the typed signature |
+| `/** Publishes a post. */` above `class PublishPost` | nothing — the class name is the summary |
+| `// arrange` / `// act` / `// assert` in a test | nothing — the structure already shows it |
+| a bare `array` on a private method with no shape | `@param array{driver: string, timeout: int}` on that private method |
+| a documented array shape on a *public* signature | a DTO, VO or Collection — the docblock is not the fix |
+| a magic constant with no source (`* 0.029 + 30`) | the rate in code + one line naming the contract or rule it came from |
 | commented-out code | delete it; git remembers |
 
 ---
@@ -1474,11 +1920,17 @@ Rules:
 
 - [ ] Every write goes through an Action with `handle()` and a transaction.
 - [ ] The Action orchestrates: transitions, other aggregates, gateways, events and jobs are explicit calls in `handle()`.
+- [ ] No `create()`, `update()`, `save()`, `delete()`, `increment()`, `attach()` or `sync()` inside an Action — every write is a model method.
+- [ ] Creation goes through a named constructor on the model, guarding its birth invariants.
 - [ ] No writes from controllers, commands, jobs, listeners, observers or model hooks.
 - [ ] Action names are verb + noun; no `*Service` / `*Manager` classes.
+- [ ] `handle()` is the Action's only public method; everything else is private.
+- [ ] No `static` on an Action — no `::run()`, no static helpers, no static state.
 - [ ] Actions receive VOs, DTOs or models — never loose primitives, arrays or `request()`.
+- [ ] No array crosses a class boundary: arrays appear only inside a class (local, private property, private/protected method), in a framework-contract method, or in a named constructor translating the outside world.
+- [ ] Collections crossing a boundary are typed with a generic or a dedicated collection class; items are models, VOs or DTOs — never arrays, never mixed shapes.
 - [ ] Action returns are models, VOs or result DTOs — never `bool` or an array.
-- [ ] DTOs are `final readonly`, in `app/Data/`, with VO/enum fields and named constructors.
+- [ ] DTOs are `final readonly`, in `app/Data/`, suffixed `Data` / `Result` / `Filter`, with VO/enum fields and named constructors.
 - [ ] Only DTOs and VOs are `final`; every other class stays open.
 - [ ] No `Http::` outside a Client; every external call goes Gateway → Client.
 - [ ] Gateways needing config or tenant data are built by a Factory with `new`; Actions inject the Factory.
@@ -1486,12 +1938,16 @@ Rules:
 - [ ] Vendor errors become domain exceptions inside the Gateway.
 - [ ] Two or more vendors: a domain-shaped contract, one adapter each, selected by a factory.
 - [ ] Model transitions guard their invariants before changing state.
+- [ ] Any join table with a column, a rule or a lifecycle is a model, not a pivot; no `withPivot`, no `->pivot->`, no `Pivot` subclass.
 - [ ] Models carry domain rules only — no config, no queries, no actor, no events.
 - [ ] Every business rule lives in an Action, not on the model or at an entry point.
-- [ ] No query building outside scopes and read Actions.
+- [ ] No query building outside scopes and `Get*` Actions.
 - [ ] All scopes use `#[Scope]`; no `scopeXxx()` prefixes anywhere.
-- [ ] No raw `where` — raw appears only for aggregates inside a report Action.
-- [ ] Reports are their own Action, named after the answer, returning VOs.
+- [ ] No bare `where()` in an Action — every predicate is a scope; the builder's `where` family appears only inside scope bodies.
+- [ ] No raw SQL — `whereRaw`/`havingRaw` appear only for aggregates inside a report Action.
+- [ ] Ordering that carries meaning is a scope, not an inline `orderBy()`.
+- [ ] Reports and specific reads are their own `Get*` Action, named after the answer, returning VOs.
+- [ ] Every `Get*` returning a list takes one `*Filter` DTO; pagination is a `Pagination` VO on it, never loose ints.
 - [ ] Every meaningful column has an enum, VO cast, or native cast.
 - [ ] Enums are string-backed and hold every rule about the value.
 - [ ] Lookup tables are `id` + `label` only, seeded from the enum, no model.
@@ -1499,12 +1955,19 @@ Rules:
 - [ ] VOs are `final readonly` with private constructors and named factories.
 - [ ] Every entry point: authorize → validate → one Action → present.
 - [ ] Controllers are single-action, with a FormRequest carrying `authorize()`.
+- [ ] Every policy and gate call is on the interface layer; no `Gate::`, `authorize()`, `can()`, `auth()` or `request()` in Actions, models, jobs, listeners or gateways.
+- [ ] No `Validator::`, `validate()`, `Rule::` or `FormRequest` type-hint inside an Action — shape stops at the entry point.
+- [ ] Actions that need the actor receive it as a typed argument from the entry point.
 - [ ] Console commands validate their options and never query directly.
 - [ ] Jobs and listeners hold only retry/queue config plus one Action call.
 - [ ] Consequences in other aggregates are listeners on a domain event, not direct calls in the emitting Action.
 - [ ] Domain events are past-tense facts, dispatched only by Actions, `ShouldDispatchAfterCommit`, payload without behavior.
 - [ ] Webhooks: signature verified in `authorize()`, payload translated by the Gateway, Action idempotent, event only on the real transition.
 - [ ] FormRequests hold only shape rules.
-- [ ] Domain exceptions are typed, per-rule, and render themselves.
+- [ ] Domain exceptions are typed, per-rule, and expose `kind()` + `userMessage()` — no `render()`, no `Request`, no status code in `app/`.
+- [ ] No `abort()`, `abort_if()`, `abort_unless()` or `HttpException` outside `app/Http/`; grep them in Actions, models, jobs, listeners and gateways should return nothing.
+- [ ] `DomainErrorKind` → status mapping exists once, in `bootstrap/app.php`.
 - [ ] Every change has a tier-1 backend feature test asserting state, events or exceptions; frontend assertions come on top, never instead.
 - [ ] No comments narrating code, no docblocks repeating types, no commented-out code; every remaining comment explains a non-obvious why.
+- [ ] Every comment is either a shenanigan note (workaround, vendor quirk, hidden ordering, deliberate oddity, a rule sourced outside the code) or a docblock carrying a generic or array shape — nothing else.
+- [ ] No comment states something the names and types already say; no class, method or test-step summary blocks.

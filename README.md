@@ -148,7 +148,9 @@ Core rules:
 - **Documents reality (AS IS)** — code, manifests, CI, and configs are the only sources; never invents, never prescribes.
 - **Ownership contract** — every generated file carries a banner on line 3. A file without the banner (hand-written) is never clobbered; `--adopt` folds its concrete rules into the generated tree and takes ownership.
 - **Preserves third-party blocks** — `<tag>...</tag>` regions (e.g. Laravel Boost) are re-appended verbatim on regeneration.
+- **Asks before merging** — on a stack it recognises, the command asks once per run whether to bring the harness convention layer into the project. Decline and the tree is generated without it; nothing is imposed.
 - **Stack convention layer** — on a Laravel target (`composer.json` requires `laravel/framework`), `guidelines/laravel.md` — followed by `guidelines/livewire.md` when `livewire/livewire` is also required — is copied to `docs/agents/coding_guidelines.md` when that file is absent, and `AGENTS.md` §2 + `CLAUDE.md` cite it as mandatory. The copy is hand-written: never regenerated, never adopted, safe to edit. `/update` pulls later upstream revisions into it.
+- **Stub block for hand-written trees** — the harness-invariant part of `AGENTS.md` / `CLAUDE.md` (conventions pointer, `Never in this repository`, docs index) lives in `stubs/*.stub`, wrapped in `<!-- jharness:start -->` … `<!-- jharness:end -->`. `scripts/apply-stub.sh` seeds the file when absent, appends the block when the file exists without it, and replaces the block in place when it is stale — content outside the markers is never touched. Copy `stubs/AGENTS.stub` by hand into a project that never runs this command.
 - `+id` / `-id` filters generate only a subset (e.g. `/ai-context +AGENTS +architecture`).
 
 ### `/ralph` — execution launcher
@@ -370,6 +372,10 @@ guidelines/
   livewire.md                  Livewire layer on top of laravel.md
                                /ai-context composes them into a Laravel
                                project as docs/agents/coding_guidelines.md
+stubs/
+  AGENTS.stub                  harness-invariant AGENTS.md block, marker-wrapped
+  CLAUDE.stub                  harness-invariant CLAUDE.md block, marker-wrapped
+                               copy by hand, or let apply-stub.sh place them
 scripts/
   ralph.sh                     phase-by-phase execution orchestrator
   ralph-watch.sh               live run panel (reads .phases/state/)
@@ -377,6 +383,8 @@ scripts/
   sync-guidelines.sh           syncs docs/agents/coding_guidelines.md with a
                                harness tree (used by /update)
   test-sync-guidelines.sh      red/green suite for sync-guidelines.sh
+  apply-stub.sh                seeds/grafts/syncs the jharness block in a
+                               project's AGENTS.md and CLAUDE.md
   check-init-drift.sh          guards against textual drift of the rules
                                duplicated across the init commands
   check-shell.sh               bash -n + shellcheck over scripts/*.sh

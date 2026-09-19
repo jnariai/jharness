@@ -1,0 +1,11 @@
+<!-- jharness:start -->
+<!-- Managed by jharness. Edits inside this block are replaced on re-run; move anything you want to keep outside it. -->
+
+This file provides guidance to Claude Code (claude.ai/code) when working with
+code in this repository.
+
+See [AGENTS.md](AGENTS.md) for project conventions, commands, and references.
+
+All code MUST follow [docs/agents/coding_guidelines.md](docs/agents/coding_guidelines.md).
+
+<!-- jharness:end -->

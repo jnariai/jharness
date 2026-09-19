@@ -1,0 +1,42 @@
+<!-- jharness:start -->
+<!-- Managed by jharness. Edits inside this block are replaced on re-run; move anything you want to keep outside it. -->
+
+## Mandatory conventions
+
+> All code in this repository MUST follow
+> [docs/agents/coding_guidelines.md](docs/agents/coding_guidelines.md).
+> Read it before the first edit. It is hand-written and never regenerated:
+> `/ai-context` does not own it and never overwrites it.
+
+### Never in this repository
+
+- A write outside a model method. `create()`, `update()`, `save()`, `delete()`,
+  `increment()`, `attach()` and `sync()` never appear in an Action — the Action
+  orders the write, the model performs it.
+- A second public method on an Action, or `static` anywhere on one. `handle()` is
+  the only public method, always called on an injected instance.
+- A policy, gate or validator below the entry point. No `Gate::`, `authorize()`,
+  `can()`, `auth()`, `request()`, `Validator::`, `validate()` or `Rule::` in
+  `app/Actions/`, `app/Models/`, `app/Jobs/`, `app/Listeners/` or `app/Gateways/`.
+- `abort()` or an `HttpException` below the entry point. Domain failures are typed
+  exceptions carrying a `DomainErrorKind`; `bootstrap/app.php` maps kind to status.
+- A bare `where()` in an Action. Every predicate is a `#[Scope]`; raw SQL appears
+  only for aggregates inside a report Action.
+- An array crossing a class boundary. Public arguments and returns are models, VOs,
+  DTOs, enums or typed Collections.
+- A `*Service`, `*Manager` or `*Repository` class. One Action per intent.
+
+## Agent documentation
+
+| File | Content |
+|---|---|
+| `docs/agents/coding_guidelines.md` | Mandatory conventions — read first |
+| `docs/agents/project_overview.md` | Purpose, consumers, macro flow |
+| `docs/agents/architecture.md` | Style, layout, layer responsibilities |
+| `docs/agents/tech_stack.md` | Language, framework, runtime, test tooling |
+| `docs/agents/domain_rules.md` | Business rules as implemented |
+| `docs/agents/api_contracts.md` | Endpoints, payloads, message formats |
+| `docs/agents/data_model.md` | Entities, storage, migrations |
+| `docs/agents/dependencies.md` | External services, internal libs, shared infra |
+
+<!-- jharness:end -->

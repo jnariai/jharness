@@ -1,6 +1,6 @@
 {
   "name": "jharness",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "jharness — commands, scripts, and hooks to help developers build robust, scalable, tested, real-world-proven projects.",
   "author": {
     "name": "Jonathan Nariai",

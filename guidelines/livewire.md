@@ -19,7 +19,7 @@ still applies. This part adds only what is specific to components.
 1. **A component is an entry point.** Authorize → validate with a Form object → one
    Action call → redirect or present. Nothing else.
 2. **Components never write.** No `save()`, no `update()`, no transaction, no query
-   chain. The Action owns the write and orchestrates it.
+   chain. The Action orchestrates the write; the model performs it.
 3. **Single-file components only.** The class and its template live in one file.
 4. **Form objects hold shape.** The DTO's `fromForm()` turns validated input into VOs
    at the edge.
@@ -112,8 +112,10 @@ Rules:
 - **A Form object for every write form** (`public PostForm $form;`). No loose public
   props for user input, and no inline `$this->validate([...])` rule arrays — the
   rules live on the Form object.
-- **Read queries for the view go through model scopes or a read Action**, called
-  from a `#[Computed]` method. Never a query builder chain in the component.
+- **Read queries for the view go through model scopes or a `Get*` Action**, called
+  from a `#[Computed]` method. Never a query builder chain in the component. A
+  `Get*` returning a list takes its `*Filter` DTO, built from the component's UI
+  state by a named constructor (`GetOverdueInvoicesFilter::fromForm($this->form)`).
 - **The component never opens a transaction** and never calls `save()`,
   `update()`, `create()` or `delete()`.
 - **`wire:model` binds to `form.*`.** Bind to a plain public prop only for UI state
@@ -184,15 +186,24 @@ public function publish(PublishPost $publish): void
   unauthenticated hit never reaches the component.
 - `@can` in the template hides what the policy denies, but hiding is never the
   enforcement — the `authorize()` call is.
+- **The component is the only place the policy runs.** The Action it calls never
+  authorizes — no `Gate::`, no `can()`, no `auth()` inside `handle()`. If the Action
+  needs the actor, the component passes it in as a typed argument.
 
 ---
 
 ## Errors in components
 
-Components carry no `try`/`catch` around Actions. The base `DomainException` holds
-the shared `notify()` binding used in a Livewire request — a Flux toast when the
-project uses Flux, otherwise a dispatched browser event — showing `userMessage()`.
-One binding, one place to change it.
+Components carry no `try`/`catch` around Actions. A domain exception thrown inside
+an Action carries only its `DomainErrorKind` and `userMessage()` — the presentation
+lives in one handler, registered in `bootstrap/app.php` alongside the HTTP mapping,
+which turns a Livewire request into a Flux toast when the project uses Flux and a
+dispatched browser event otherwise. One place to change it, and the exception stays
+free of both HTTP and UI knowledge.
+
+Components never `abort()` either. Authorization failures come from
+`$this->authorize()`, which Livewire already renders; everything else is a domain
+exception from the Action.
 
 ---
 
@@ -255,15 +266,17 @@ it('hides the publish button once published', function () {
 | Do not | Do |
 |---|---|
 | business logic in a component method | Action called from the method |
-| `$this->post->update([...])` in a component | the Action owns the write |
+| `$this->post->update([...])` in a component | the Action orders the write, the model performs it |
 | a separate class file + view for a component | one single-file component |
 | `$this->validate(['title' => 'required'])` inline | rules on the Form object |
 | loose public props for form input | a Form object bound as `form.*` |
 | `DB::transaction()` in a component | transaction inside the Action's `handle()` |
-| query builder chains inside a component | scope, or read Action, from a `#[Computed]` |
+| query builder chains inside a component | scope, or `Get*` Action, from a `#[Computed]` |
 | business rules in `#[Validate]` | Form = shape, Action = rules |
-| `try`/`catch` around Actions in components | self-rendering domain exception |
+| `try`/`catch` around Actions in components | domain exception + the handler in `bootstrap/app.php` |
+| `abort(403)` in a component method | `$this->authorize(...)`, or a domain exception from the Action |
 | authorization only in `mount()` | `authorize()` in every action method |
+| the Action re-checking the policy | the component authorizes; the Action just runs |
 | a component tested only with `assertSee` | assert state first, then the UI |
 
 ---
@@ -272,6 +285,7 @@ it('hides the publish button once published', function () {
 
 - [ ] Components are single-file `new class extends Component`, methods thin.
 - [ ] Every action method: authorize → validate the Form object → one Action → redirect.
+- [ ] Policies run in the component only — never inside the Action it calls.
 - [ ] No writes, transactions or query chains in components.
 - [ ] Form objects hold only shape rules; DTOs convert them with `fromForm()`.
 - [ ] Every component action has a Livewire test asserting backend state, validation and authorization; UI assertions on top.

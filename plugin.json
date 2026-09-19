@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "jharness",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Commands, agents, and scripts to help developers build robust, scalable, tested, real-world-proven projects.",
   "author": {
     "name": "Jonathan Nariai",

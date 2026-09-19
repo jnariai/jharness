@@ -74,6 +74,26 @@ git -C <target> rev-parse --is-inside-work-tree
 
 Fails → abort with `Target <path> is not a git repository — aborting.` Write nothing.
 
+### 2.4 — Ask before merging the convention layer
+
+Before any inspection or writing, ask the developer whether this run should bring the harness convention layer into the target. Run the stack detection first so the question names the real stack:
+
+```bash
+"<plugin-root>/scripts/sync-guidelines.sh" --source "<plugin-root>" --check <target>
+"<plugin-root>/scripts/apply-stub.sh" --source "<plugin-root>" --check <target>
+```
+
+`STACK none` → skip this step entirely, set `merge = false`, and go to step 3.
+
+Otherwise ask once, with `AskUserQuestion`, naming the detected stack and what each on-disk state would become (`GUIDELINES <status>` and the two `STUB` records tell you exactly that):
+
+| Answer | `merge` | Effect |
+|---|---|---|
+| merge the `<stack>` conventions | `true` | step 2.5 seeds `coding_guidelines.md` when absent, and step 2.6 puts the jharness block into `AGENTS.md` / `CLAUDE.md` |
+| skip — leave this project's conventions alone | `false` | steps 2.5 and 2.6 do nothing; `guidelines.status = none`; the tree is generated without a convention layer |
+
+Never ask twice, and never ask when `STACK` is `none`. A non-interactive run defaults to `merge = true` — that is the state every previous release shipped.
+
 ### 2.5 — Seed stack guidelines (Laravel only)
 
 The harness ships an opinionated convention layer under `guidelines/` inside the plugin directory (`<plugin-root>`, the directory this command file lives two levels under): `laravel.md`, plus `livewire.md` for Livewire projects. When the target is a Laravel repo, their composition is the project's mandatory convention layer and every generated artifact points at it.
@@ -102,6 +122,30 @@ Otherwise, by the `GUIDELINES` record:
 The copy carries **no** `/ai-context` banner on purpose: it is hand-written content, classified `not-owned` by the inspector in step 3, so the docs writer skips it and no later run ever clobbers it. Never run the copy with `--adopt` semantics — `--adopt` must not overwrite a seeded or hand-written `coding_guidelines.md`.
 
 Carry `guidelines = {stack: <STACK>, path: docs/agents/coding_guidelines.md, status: seeded|present}` into steps 4–6.
+
+`merge = false` → skip this step, set `guidelines.status = none`, and go to step 3.
+
+### 2.6 — Apply the jharness block to AGENTS.md / CLAUDE.md
+
+The harness-invariant part of the context tree — the mandatory-conventions pointer, the `Never in this repository` rules, the `docs/agents` index — ships as static stubs `stubs/AGENTS.stub` / `stubs/CLAUDE.stub`, delimited by `<!-- jharness:start -->` / `<!-- jharness:end -->`. It is what a developer copies by hand into a project that never runs this command.
+
+`scripts/apply-stub.sh` places it — never re-implement the marker handling here:
+
+```bash
+"<plugin-root>/scripts/apply-stub.sh" --source "<plugin-root>" <target>
+```
+
+| `STUB` status | On-disk state | Outcome |
+|---|---|---|
+| `seeded` | file absent | title + block written |
+| `grafted` | file exists, no block | block appended after the project's own content |
+| `synced` | block present, stale | block replaced in place; everything outside it untouched |
+| `current` | block present, matches | nothing written |
+| `generated` | file carries the `/ai-context` banner | left alone — step 4 owns the whole file, block included |
+
+Skip this step when `merge = false`. Both artifacts normally report `generated` on a repo this command already owns; `seeded` and `grafted` are the hand-written cases, and they are exactly the files step 4 would otherwise skip as `not-owned`.
+
+Carry the two `STUB` records into step 6.
 
 ### 3 — Inspect (delegate to `ai-context-inspector`)
 
@@ -161,6 +205,8 @@ Emit one table:
 | `<path>` | `created` / `updated` / `unchanged` / `adopted` / `skipped (N/A)` / `skipped (not owned)` / `disabled` |
 
 After the table:
+- `merge = false` → 1 line: the convention layer was skipped at the developer's request; re-run to be asked again.
+- Any `STUB` record of `seeded`, `grafted` or `synced` → 1 line naming the artifacts and stating that only the `<!-- jharness:start -->` … `<!-- jharness:end -->` block is managed; content outside it is never touched.
 - `guidelines.status = seeded` → 1 line: the `<stack>` convention layer was copied to `docs/agents/coding_guidelines.md`; it is hand-written, never regenerated, edit it freely.
 - `guidelines.status = present` → 1 line: `/jharness:update` pulls upstream revisions of the convention layer (unedited copies refresh automatically; edited ones are never overwritten without asking).
 - Seeded legacy guidance, when any (origin + destination section).
@@ -175,6 +221,8 @@ After the table:
 - **Never invent** — applies transitively; agents cite evidence or emit the N/A shape.
 - **Never clobber hand-written files** without `--adopt`.
 - **Stack guidelines win** — on a Laravel target (with or without Livewire), `docs/agents/coding_guidelines.md` is the harness convention layer: seeded once when absent, never regenerated, never adopted, and cited as mandatory in `AGENTS.md` §2 and `CLAUDE.md`.
+- **Ask before merging** — the convention layer and the jharness block are never imposed. Step 2.4 asks once per run; `merge = false` skips steps 2.5 and 2.6 entirely.
+- **The stub owns only its block** — `scripts/apply-stub.sh` writes between `<!-- jharness:start -->` and `<!-- jharness:end -->` and nowhere else. A hand-written `AGENTS.md` keeps every line it had.
 - **Preserve foreign marker blocks** — third-party `<tag>...</tag>` regions (e.g. `<laravel-boost-guidelines>`) in owned files are re-appended verbatim on regeneration, never reworded, never seeded; size checks ignore them.
 - **No git writes** — never stage, commit, or reset; the developer commits manually.
 - **No secrets** — `.env` is never read; env var names come from `.env.example` only.
