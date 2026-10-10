@@ -6,6 +6,8 @@ A [Claude Code](https://claude.com/claude-code) and [GitHub Copilot CLI](https:/
 
 The harness is **stack-agnostic**: language, framework, commands, and conventions are defined by the project's own documents (`AGENTS.md`, `CLAUDE.md`, the `.spec/` chain), never by the harness.
 
+On a **Laravel** project (`composer.json` requires `laravel/framework`, or the project description picks Laravel), `/init` and `/plan` switch on a *Laravel profile* on top of that: bounded contexts and abilities in the project description, Eloquent keys, `public_id`, lookup tables and `TableGroup`s in the schema, use-case-slice tasks with Actions and tier-1 tests in the phases and plans — all following the `guidelines/` convention layer. Any other stack never sees it.
+
 ## Workflow overview
 
 ```
@@ -136,7 +138,7 @@ Generates or refreshes 10 artifacts from the **implemented code** (never reads `
 | `docs/agents/project_overview.md` | Purpose, consumers, macro flow |
 | `docs/agents/architecture.md` | Style, layout, layer responsibilities |
 | `docs/agents/tech_stack.md` | Language, framework, runtime, test tooling |
-| `docs/agents/coding_guidelines.md` | ≥ 3 observed patterns + enforcement — or the Laravel (+ Livewire) convention layer, seeded verbatim |
+| `docs/agents/coding_guidelines.md` | ≥ 3 observed patterns + enforcement — or the Laravel convention layer (+ Inertia React/Vue or Livewire), seeded verbatim |
 | `docs/agents/domain_rules.md` | Business rules as implemented |
 | `docs/agents/api_contracts.md` | Endpoints, payloads, message formats |
 | `docs/agents/data_model.md` | Entities, storage, migrations |
@@ -149,7 +151,7 @@ Core rules:
 - **Ownership contract** — every generated file carries a banner on line 3. A file without the banner (hand-written) is never clobbered; `--adopt` folds its concrete rules into the generated tree and takes ownership.
 - **Preserves third-party blocks** — `<tag>...</tag>` regions (e.g. Laravel Boost) are re-appended verbatim on regeneration.
 - **Asks before merging** — on a stack it recognises, the command asks once per run whether to bring the harness convention layer into the project. Decline and the tree is generated without it; nothing is imposed.
-- **Stack convention layer** — on a Laravel target (`composer.json` requires `laravel/framework`), `guidelines/laravel.md` — followed by `guidelines/livewire.md` when `livewire/livewire` is also required — is copied to `docs/agents/coding_guidelines.md` when that file is absent, and `AGENTS.md` §2 + `CLAUDE.md` cite it as mandatory. The copy is hand-written: never regenerated, never adopted, safe to edit. `/update` pulls later upstream revisions into it.
+- **Stack convention layer** — on a Laravel target (`composer.json` requires `laravel/framework`), `guidelines/laravel.md` — followed by `guidelines/inertia.md` + `guidelines/react.md` or `guidelines/vue.md` when `package.json` requires `@inertiajs/react` / `@inertiajs/vue3`, or by `guidelines/livewire.md` when `livewire/livewire` is required — is copied to `docs/agents/coding_guidelines.md` when that file is absent, and `AGENTS.md` §2 + `CLAUDE.md` cite it as mandatory. The copy is hand-written: never regenerated, never adopted, safe to edit. `/update` pulls later upstream revisions into it.
 - **Stub block for hand-written trees** — the harness-invariant part of `AGENTS.md` / `CLAUDE.md` (conventions pointer, `Never in this repository`, docs index) lives in `stubs/*.stub`, wrapped in `<!-- jharness:start -->` … `<!-- jharness:end -->`. `scripts/apply-stub.sh` seeds the file when absent, appends the block when the file exists without it, and replaces the block in place when it is stale — content outside the markers is never touched. Copy `stubs/AGENTS.stub` by hand into a project that never runs this command.
 - `+id` / `-id` filters generate only a subset (e.g. `/ai-context +AGENTS +architecture`).
 
@@ -176,7 +178,7 @@ Launcher for `scripts/ralph.sh` from inside Claude Code. It resolves the phase d
 Clones the harness from GitHub (`jnariai/jharness`, `main` by default) into a throwaway directory and brings two things up to date:
 
 1. **The harness** — when the installed plugin differs from upstream, runs `claude plugin marketplace update` + `claude plugin update jharness@<marketplace>`. Restart Claude Code to load the new version. A plugin not managed by Claude Code (e.g. `--plugin-dir` checkout) is left alone.
-2. **The project's coding guidelines** — `scripts/sync-guidelines.sh` compares `docs/agents/coding_guidelines.md` with the upstream guidelines for the project's stack (`guidelines/laravel.md`, plus `guidelines/livewire.md` on Livewire projects):
+2. **The project's coding guidelines** — `scripts/sync-guidelines.sh` compares `docs/agents/coding_guidelines.md` with the upstream guidelines for the project's stack (`guidelines/laravel.md`, plus the Inertia + React/Vue or Livewire layer the project uses):
 
 | Local file | Result |
 |---|---|
@@ -368,7 +370,10 @@ commands/
 agents/                        specifier, clarifier, planner,
                                ai-context-{inspector,core,docs}
 guidelines/
-  laravel.md                   opinionated Laravel conventions
+  laravel.md                   opinionated Laravel conventions (Laravel 13, PHP 8.4)
+  inertia.md                   Inertia contract shared by React and Vue
+  react.md                     React layer on top of inertia.md
+  vue.md                       Vue layer on top of inertia.md
   livewire.md                  Livewire layer on top of laravel.md
                                /ai-context composes them into a Laravel
                                project as docs/agents/coding_guidelines.md

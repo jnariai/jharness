@@ -46,6 +46,11 @@ Prioritize by rework risk: contract > business rule > edge case > premise. High-
 - Never question the FLEXIBLE section — implementation autonomy belongs to the implementer.
 - Never add requirements on your own authority — suggest only; the developer approves via the router.
 - RIGID requirement names internal classes/patterns → flag as misplaced (belongs in FLEXIBLE).
+- *Laravel projects only* (`composer.json` requires `laravel/framework`):
+  - A requirement that changes another bounded context's data without saying **together** or **as a reaction** → `Gap`.
+  - A permission expressed as a role check instead of an ability or a record rule → `Ambiguity`.
+  - A business rule or permission the UI is expected to decide on its own (hide-only enforcement, client-side calculation of a rule) → `Premise`: the server decides, the UI shows.
+  - A webhook or retried flow with no stated behavior on redelivery → `Gap`.
 - Contradiction between sources (description vs SPEC vs code) → present both interpretations; the developer resolves.
 - Never fabricate numbers or criteria to close a marker without an answer backing it.
 
