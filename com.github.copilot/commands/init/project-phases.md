@@ -34,7 +34,8 @@ Before asking anything, read the inputs in this order:
 
 - **`.spec/init/project-description.md`** — scope, tech stack, core workflows.
 - **`.spec/init/user-stories.md`** — the stories, acceptance criteria, priorities.
-- **`.spec/init/database-schema.md`** — every table, lookup, pivot, relationship.
+- **`.spec/init/database-schema.md`** — every table, lookup, pivot, relationship, and the context each table belongs to.
+- **`docs/agents/coding_guidelines.md`** — the Laravel convention layer (Laravel + Inertia React/Vue or Livewire). Every task is phrased in its vocabulary: Actions, model transitions and named constructors, FormRequests/Form objects, View DTOs, `Get*` reads, events and listeners, gateways. Absent → read the harness `guidelines/laravel.md` plus the frontend layer from the plugin directory instead, and add to the close-out that `/jharness:ai-context` must seed the file before `/jharness:ralph` runs — the ralph sessions read it before their first edit.
 - **`.spec/init/design/`** — if this directory exists, it holds the **UI/design specs** (mockups, screen definitions, component references, images). Read it. Every task that builds a screen or component **must** point at its design reference, and its implementation must be **faithful to the proposed design**. `.spec/init/design/` is always a **manual artifact**: the developer creates and populates it; no `init:*` command writes there. Its absence is never an error.
 
 If any of the first three files is missing, stop and tell the developer to run the missing `init:*` command first. Match the **language** of the project description for all prose.
@@ -79,9 +80,11 @@ Any output → warn the developer ("input changed after this artifact was genera
 
 Scan the project so you can mark completed work:
 
-- Migrations (`database/migrations/`), models (`app/Models/`), seeders/factories.
-- Frontend components, pages/screens, routes.
-- Existing tests (`tests/`), controllers, services, form requests, policies.
+- Whether a starter kit is installed (`artisan`, `resources/js/pages/` or `resources/views/pages/`, its auth controllers) and whether the tooling exists (`pint.json`, `phpstan.neon`, `rector.php`, `tests/Arch.php`, `scripts/grep-gates.sh`, a `lint` script in `composer.json`).
+- Migrations (`database/migrations/`), models (`app/Models/`), enums (`app/Enums/`), factories.
+- Actions (`app/Actions/<Context>/`), DTOs (`app/Data/`), events and listeners, controllers, FormRequests, policies, gateways.
+- Pages and components (`resources/js/pages/`, `resources/js/components/`, or `resources/views/pages/` and `resources/views/components/`), routes.
+- Existing tests (`tests/`).
 
 For each task you define, check whether the code already satisfies it. If it does, mark it `[x]`; otherwise `[ ]`. When partially done, mark `[ ]` and note in the task what remains.
 
@@ -100,13 +103,30 @@ Use `AskUserQuestion` for discrete decisions with clear options. Ask real open q
 
 ### Foundation first, always
 
-Order the phases so that **foundation work precedes feature flows**. The early phases build the base the rest stands on:
+Phase 1 starts from an installed Laravel 13 starter kit (React, Vue or Livewire) inside a git repository, with `docs/agents/coding_guidelines.md` seeded. When the project is still empty, the close-out tells the developer to run `laravel new` with the chosen kit and `/jharness:ai-context` before `/jharness:ralph` — never plan "create the Laravel app" as a phase task.
 
-1. **Database foundation** — all migrations and lookup-table seeders from the schema.
-2. **Models & relationships** — every model, with **all relationships wired up front** (belongsTo, hasMany, belongsToMany, etc.), casts, fillables, soft deletes. Do not defer relationships to later feature phases — the models come out of the foundation phase relationship-complete.
-3. **Frontend foundation** — the base UI: design-system components, layout, shared/reusable components referenced by the design specs.
+The early phases build the base the rest stands on, in this order:
 
-Only **after** the foundation is in place do the phases start implementing the **project flows** (auth, then each feature area / core workflow, feature by feature).
+1. **Conventions and tooling** — Pint, Larastan level 6, Rector with `rector-laravel`, `tests/Arch.php` from the guidelines' arch preset, `scripts/grep-gates.sh`, `composer lint`; SQLite in-memory in `phpunit.xml`; `Model::shouldBeStrict()`; `App\Exceptions\DomainException` + `App\Enums\DomainErrorKind` + the `withExceptions()` mapping; `HasPublicId`; the shared VOs the schema needs (`Pagination`, `Money`). Inertia projects add the TypeScript transformer and its generated file, the shared props (`auth.user`, `auth.can`, `flash`, `locale`), the toast outlet and the i18n helper; Livewire projects add the `x-ui.*` primitives, the toast and `HandlesDomainErrors`. From this phase on every phase must leave `composer lint` and `composer test` green — ralph's gate 2 runs both.
+2. **Identity** — the starter kit's auth and settings code refactored into `Identity` Actions (`RegisterUser`, `UpdateProfile`, `UpdatePassword`, `DeleteAccount`) with named constructors and transitions on `User`, `public_id` on users, the abilities of the project description as `Gate::define()` entries, roles as a string-backed enum when the project has them. The kit's own tests stay green throughout. Skipped only when the kit was installed without auth — then this phase adds just the abilities and `public_id`.
+3. **Database foundation** — every migration from the schema (forward-only, constrained foreign keys with their delete behavior, `public_id` columns) and every string-backed enum with its lookup table seeded from its cases inside the same migration. No seeders for lookup data.
+4. **Models** — every model with **all relationships wired up front**, `$fillable`, `casts()`, the memoized lookup `Attribute` for each business enum, `HasPublicId` where exposed, and a factory with named states per model. Transitions, named constructors and scopes arrive with the feature that first needs them, tested there.
+5. **Frontend foundation** — layouts, navigation driven by `auth.can` (Inertia) or `@can` (Livewire), and the shared components referenced by the design specs.
+
+Only **after** the foundation do the phases implement the **project flows**, one bounded context and feature area at a time.
+
+### Feature tasks are use-case slices
+
+A feature task is **one user intent**, cut vertically through the layers the guidelines define — not one layer at a time:
+
+- the model method that guards the invariant (transition or named constructor), plus any scope;
+- the Action in `app/Actions/<Context>/` (`PublishPost`, `GetOverdueInvoices`) — writes in a transaction, reads as `Get*` with a `*Filter`;
+- the entry point: resource-controller method + FormRequest (Inertia) — every method a resource method; a non-CRUD intent is its own controller (`store` does it, `destroy` undoes it), never `__invoke`, or the component action method + Form object (Livewire); the policy method or ability it checks;
+- for Inertia, the View DTOs and the page that consume it; for Livewire, the template;
+- the event it dispatches and, as **separate tasks**, each listener + Action that reacts in another context;
+- gateways only through a Client + Gateway + Factory task of their own, before the first task that calls the vendor.
+
+Each task lists those pieces in an `**Artifacts:**` line by class or file name, so the agent knows what to build and the verifier knows what to look for.
 
 ### Phase sizing (one agent session per phase)
 
@@ -135,8 +155,9 @@ The self-checks in step 5 enforce this format mechanically.
 
 - Every task has **acceptance criteria** — concrete, validatable conditions (states, limits, failure paths), not vague intent.
 - **Business-logic tasks** (rules, calculations, state transitions, permissions, validations, workflows) **must** specify the **automated feature tests** to generate. Tests **primarily assert business rules** — the limits, states, and edge cases from the stories and schema.
-- Tests assert business rules **at the layer that owns them**: service/domain return values, persisted state, HTTP status and response data, dispatched events/jobs, raised exceptions and validation errors.
-- **Test everything, backend features first.** The backend feature tests above come first in every task and are what proves a rule. In Laravel prefer `assertDatabaseHas`, `assertJsonPath`, `assertStatus`, `assertRedirect`, `Event::assertDispatched`; use each stack's equivalents. Frontend tests (rendered output such as `assertSee`, component UI state, browser tests) may be added on top — never as the only test of a business rule.
+- Tests follow the guidelines' tiers. **Tier 1 first**: every Action driven through the entry point that really reaches it — HTTP route, Inertia page (`assertInertia`), Livewire component (`Livewire::test`), console command, job, listener — asserting persisted state, dispatched events, domain exceptions, redirects and flash, validation errors. Each task lists: the happy path, one test per invariant and business rule, one for authorization denied, one for invalid input.
+- Events: the emitting task asserts the event is dispatched (and not on a redelivery); each listener task tests its own Action and the wiring (`Event::assertListening`). Webhook and retried flows are tested by **redelivery** — run twice, assert one transition.
+- Frontend tests (`assertSee`, browser tests) may be added on top — never as the only test of a business rule. Pest browser tests only for the project's critical journeys.
 - One test per rule or edge case. No duplicate coverage across tasks — cite the earlier task instead of restating the case.
 - **Frontend-only tasks** (building a screen/component with no business logic) **do not require tests** (rendering tests are optional), but **must** have acceptance criteria that can be validated (matches design reference, renders required elements/states, responsive/interaction behavior), plus a **Design ref** pointing at the relevant `.spec/init/design/` artifact.
 - Keep every task traceable to a story (`US-x.y`), a schema table, a workflow, or a design artifact. No invented scope.
@@ -165,6 +186,7 @@ Write to `.spec/init/project-phases.md` (create the `.spec/init/` directories if
 
 **Conventions:**
 - `[ ]` pending · `[x]` done in the codebase.
+- Every task follows `docs/agents/coding_guidelines.md`; every phase ends with `composer lint` and `composer test` green.
 - Phases and sub-phases are numbered (`Phase 1`, `Phase 5.3`) for reference by AI agents.
 - Business-logic tasks list the **feature tests** to generate; frontend-only tasks list validatable **acceptance criteria** and a **Design ref**.
 
@@ -180,6 +202,7 @@ Write to `.spec/init/project-phases.md` (create the `.spec/init/` directories if
   - **Acceptance criteria:**
     - <concrete, validatable condition>
     - ...
+  - **Artifacts:** <Context Action, model method, controller + FormRequest or component + Form, View DTO, page, event/listener — by class or file name>
   - **Feature tests:** <test name → what business rule it asserts> *(omit for frontend-only tasks)*
   - **Design ref:** <path under .spec/init/design/> *(only for screen/component tasks)*
   - **Traces:** <US-x.y / table / workflow>
@@ -228,6 +251,11 @@ grep -E '^### Phase' "$F" | grep -vE '^### Phase [0-9]+\.[0-9]+: ' || true
 TASKS=$(grep -cE '^- \[[ x]\] \*\*Task:\*\*' "$F"); [ "$TASKS" -ge 1 ]
 [ "$TASKS" -eq "$(grep -c '\*\*Acceptance criteria:\*\*' "$F")" ]   # every task has criteria
 [ "$TASKS" -eq "$(grep -c '\*\*Traces:\*\*' "$F")" ]                # every task is traceable
+[ "$TASKS" -eq "$(grep -c '\*\*Artifacts:\*\*' "$F")" ]             # every task names what it builds
+# the conventions/tooling foundation is planned (or already done) somewhere (prints nothing)
+for piece in 'tests/Arch.php' 'grep-gates' 'DomainErrorKind' 'HasPublicId'; do
+  grep -Fq "$piece" "$F" || echo "foundation piece not planned: $piece"
+done
 # coverage: every story ID in the user-stories appendix appears in >=1 **Traces:** line
 # (loop must print nothing; the ([^0-9]|$) guard keeps US-1.1 from matching US-1.10)
 for id in $(grep -oE '^\| US-[0-9]+\.[0-9]+ ' .spec/init/user-stories.md | grep -oE 'US-[0-9]+\.[0-9]+' | sort -u); do
@@ -249,5 +277,6 @@ After writing, report:
 - Phase count, task count, and how many tasks are already `[x]`.
 - Coverage: confirm every story ID and every schema table passed the mechanical coverage loops (green), or list what was added to close the gaps.
 - The MVP cut line (which phase completes the first release).
+- What must exist before `/jharness:ralph`: the starter kit installed, a clean git tree, `docs/agents/coding_guidelines.md` (run `/jharness:ai-context` when absent).
 - Self-checks: all green — list any check that initially failed and how it was fixed (Red → Green).
 - Any open questions still needing the developer's decision.

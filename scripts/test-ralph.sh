@@ -275,13 +275,14 @@ Projeto de teste.
 
 # Fixture de projeto Laravel + Sail. `sail ps` responde conforme SAIL_UP.
 make_sail_fixture() {
-  local repo="$1" up="$2"
+  local repo="$1" up="$2" scripts='"test": "phpunit"'
+  [ "${3:-}" = lint ] && scripts='"lint": "pint --test", "test": "phpunit"'
 
   touch "$repo/artisan"
-  cat > "$repo/composer.json" <<'JSON'
+  cat > "$repo/composer.json" <<JSON
 {
   "require-dev": { "laravel/sail": "^1.0" },
-  "scripts": { "test": "phpunit" }
+  "scripts": { $scripts }
 }
 JSON
 
@@ -718,6 +719,41 @@ if case_enabled laravel-no-sail; then
   run_ralph "$d" empty-diff --engine claude --max-cycles 1 > /dev/null
   assert_contains "$d/out.log" "test command (detected): composer test" "sem sail -> composer test"
   assert_not_contains "$d/out.log" "Sail" "nao mencionou Sail"
+fi
+
+# ---------------------------------------------------------------------------
+# 16b. composer.json com script lint -> gate 2 roda lint antes dos testes
+# ---------------------------------------------------------------------------
+if case_enabled laravel-lint; then
+  header "16b. Laravel com composer lint -> gate 2 = lint && test"
+  d=$(new_case laravel-lint)
+  touch "$d/repo/artisan"
+  printf '{ "scripts": { "lint": "pint --test", "test": "phpunit" } }\n' > "$d/repo/composer.json"
+  git -C "$d/repo" add -A && git -C "$d/repo" commit -q -m "chore: laravel"
+  run_ralph "$d" empty-diff --engine claude --max-cycles 1 > /dev/null
+  assert_contains "$d/out.log" "test command (detected): composer lint && composer test" "lint antes do composer test"
+fi
+
+if case_enabled sail-lint; then
+  header "16c. Sail com composer lint -> lint e testes dentro do container"
+  d=$(new_case sail-lint)
+  make_sail_fixture "$d/repo" up lint
+  git -C "$d/repo" add -A && git -C "$d/repo" commit -q -m "chore: sail"
+  rc=$(run_ralph "$d" ok --engine claude)
+  assert_eq 0 "$rc" "exit 0"
+  assert_contains "$d/out.log" "test command (detected): vendor/bin/sail composer lint && vendor/bin/sail test" "lint via sail"
+  assert_eq 4 "$(commits "$d")" "fases commitadas"
+fi
+
+if case_enabled test-cmd-no-lint; then
+  header "16d. --test-cmd e verbatim: nao ganha lint"
+  d=$(new_case test-cmd-no-lint)
+  touch "$d/repo/artisan"
+  printf '{ "scripts": { "lint": "pint --test", "test": "phpunit" } }\n' > "$d/repo/composer.json"
+  git -C "$d/repo" add -A && git -C "$d/repo" commit -q -m "chore: laravel"
+  rc=$(run_ralph "$d" ok --engine claude --test-cmd "$d/test.sh")
+  assert_eq 0 "$rc" "exit 0"
+  assert_not_contains "$d/out.log" "composer lint" "override sem lint"
 fi
 
 # ---------------------------------------------------------------------------

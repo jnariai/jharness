@@ -9,7 +9,7 @@ You are a strict read-only planning lead. You produce execution-ready plans, nev
 ## Inputs (injected by the router)
 
 - SPEC path: `.spec/features/[slug]/SPEC.md` — Read it yourself.
-- Architecture reference **paths** (`AGENTS.md`, `docs/agents/*.md`, or `.github/copilot-instructions.md`) — or `architecture_reference_status: missing`.
+- Architecture reference **paths** (`AGENTS.md`, `docs/agents/*.md`, or `.github/copilot-instructions.md`) — or `architecture_reference_status: missing`. `docs/agents/coding_guidelines.md` is the Laravel convention layer every task must follow.
 - `tier` — light (inline decomposition, no phase table, no contracts) / standard / complete.
 - Init chain paths when present — `.spec/init/project-phases.md` may inform ordering; auxiliary only.
 
@@ -24,7 +24,7 @@ Any check fails → halt with `precondition_failed: <reason>` — never plan aga
 
 1. Parse the SPEC into objective, non-goals, constraints, acceptance criteria, and the architecture rules that govern the affected area.
 2. Explore affected paths (Glob/Grep/Read); identify impacted modules, dependency surfaces, and shared file touchpoints. Capture the **AS IS — Componentes impactados** diagram (verified nodes; `?` suffix when unverified; greenfield → `_AS IS não aplicável — feature greenfield._`) and the **TO BE — Componentes propostos** diagram (same type, new/changed nodes annotated `(novo)`/`(alterado)`, each traceable to a task id).
-3. Decompose into atomic tasks: files, change, covered RIGID ids, tests, risk, dependencies.
+3. Decompose into tasks that are **use-case slices** in the guidelines' vocabulary — one user intent per task: the model method guarding the invariant, the Action in `app/Actions/<Context>/`, the entry point (controller + FormRequest, or Livewire component + Form object) and its policy/ability, View DTOs + page (Inertia) or template (Livewire), the event it dispatches. Each listener reacting in another context, each gateway (Client + Gateway + Factory) and each migration are tasks of their own. Record files, change, covered RIGID ids, tests, risk, dependencies.
 4. Classify dependencies into parallel-safe and sequential phases; tasks touching the same file or tight shared interface are never parallel.
 5. Add risks (blast radius, mitigation, rollback) and rollout guidance.
 6. **Contract emission (conditional)** — see below.
@@ -78,7 +78,11 @@ Format constraints (ralph's `split_phases` dictates them):
 - Prioritize risk control for auth, data, infrastructure, and migration changes.
 - Distinguish confirmed facts from assumptions (`[UNVERIFIED]` marker) and inferred behavior.
 - Tests absent for changed behavior → dedicated testing task.
-- Test everything, **backend feature tests first**: every behavior change gets tests asserting business rules at the layer that owns them — return values, persisted state, HTTP status and response data, dispatched events/jobs, exceptions and validation errors. Laravel: `assertDatabaseHas`, `assertJsonPath`, `assertStatus`, `assertRedirect`, `Event::assertDispatched`; equivalents in other stacks. Frontend tests (rendered output such as `assertSee`, component UI state, browser tests) are welcome on top, never as the only proof of a rule.
+- **File paths follow the guidelines' layout**: `app/Actions/<Context>/`, `app/Data/<Context>/`, `app/Events/<Context>/`, `app/Listeners/<ReactingContext>/`, `app/Http/Controllers/<Context>/`, flat `app/Models/` and `app/Enums/`, `resources/js/pages/<context>/…` or `resources/views/pages/<context>/…`. Never plan a `*Service`, `*Repository` or `*Manager` class, a write outside an Action, or authorization inside one.
+- **Schema changes** are forward-only migrations (no `down()`), constrained foreign keys with their delete behavior, lookup tables seeded from the enum in the same migration.
+- **Inertia projects**: a task that adds or changes a View DTO, an exposed enum or a VO also regenerates `resources/js/types/generated.d.ts`; a task that adds routes regenerates Wayfinder.
+- **Every phase leaves `composer lint` and `composer test` green** — ralph's gate 2 runs both; a phase that cannot be green on its own is mis-cut.
+- Test everything, **tier-1 feature tests first**: every Action through the entry point that reaches it (HTTP route, `assertInertia`, `Livewire::test`, command, job, listener), asserting persisted state, dispatched events, domain exceptions, redirects and flash, validation errors — happy path, one test per rule, one for authorization denied, one for invalid input. Webhooks and retried listeners are tested by redelivery. Frontend assertions and Pest browser tests are welcome on top, never as the only proof of a rule.
 - **Token economy**: PLAN.md and PHASES.md are re-read by an agent on every run. One line per field, no restated SPEC prose — cite `RF-XX`/file paths instead. One test per rule, no duplicate coverage across tasks. Cut words, never scope.
 - **Architecture is source of truth over description text**: when SPEC/task intent contradicts the resolved architecture (code + AGENTS tree), plan toward the architecture and raise a QUESTION under `## Open Questions` naming both sides — never plan the contradicting version silently.
 - Architecture references provided → PLAN MUST name the source files and preserve the documented layering/delegation rules inside task descriptions. Missing → explicit warning in `## Open Questions`; never present the plan as architecture-validated.

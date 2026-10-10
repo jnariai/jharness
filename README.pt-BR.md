@@ -2,7 +2,7 @@
 
 Plugin de [Claude Code](https://claude.com/claude-code) com comandos, agentes e scripts para levar um projeto da ideia à implementação de forma estruturada: especificação formal, planejamento em fases e execução autônoma com validação mecânica — sem abrir mão do controle humano nos pontos de decisão.
 
-O harness é **agnóstico de stack**: quem define linguagem, framework, comandos e convenções são os documentos do próprio projeto (`AGENTS.md`, `CLAUDE.md`, cadeia `.spec/`), nunca o harness.
+O harness é **Laravel-first**: planeja e constrói aplicações Laravel 13 / PHP 8.4 sobre os starter kits oficiais de React, Vue ou Livewire, sob uma camada de convenções opinativa (`guidelines/`) — bounded contexts, Actions, models ricos, eventos, gateways, View DTOs e enforcement mecânico com Pest arch, Larastan, Pint, Rector e grep gates. `/init` e `/plan` recusam outros frameworks; `/ai-context` e `ralph.sh` continuam funcionando em qualquer repositório.
 
 ## Visão geral do fluxo
 
@@ -118,7 +118,7 @@ Gera ou atualiza 10 artefatos a partir do **código implementado** (nunca lê `.
 | `docs/agents/project_overview.md` | Propósito, consumidores, fluxo macro |
 | `docs/agents/architecture.md` | Estilo, layout, responsabilidades por camada |
 | `docs/agents/tech_stack.md` | Linguagem, framework, runtime, tooling de teste |
-| `docs/agents/coding_guidelines.md` | ≥ 3 padrões observados + enforcement — ou a camada de convenções Laravel (+ Livewire), copiada verbatim |
+| `docs/agents/coding_guidelines.md` | ≥ 3 padrões observados + enforcement — ou a camada de convenções Laravel (+ Inertia React/Vue ou Livewire), copiada verbatim |
 | `docs/agents/domain_rules.md` | Regras de negócio como implementadas |
 | `docs/agents/api_contracts.md` | Endpoints, payloads, formatos de mensagem |
 | `docs/agents/data_model.md` | Entidades, storage, migrations |
@@ -130,7 +130,7 @@ Regras centrais:
 - **Documenta a realidade (AS IS)** — código, manifests, CI e configs são as únicas fontes; nunca inventa, nunca prescreve.
 - **Contrato de ownership** — todo arquivo gerado carrega banner na linha 3. Arquivo sem banner (escrito à mão) nunca é sobrescrito; `--adopt` incorpora as regras concretas dele à árvore gerada e assume a posse.
 - **Preserva blocos de terceiros** — regiões `<tag>...</tag>` (ex.: Laravel Boost) são re-anexadas verbatim na regeneração.
-- **Camada de convenções da stack** — em alvo Laravel (`composer.json` com `laravel/framework`), `guidelines/laravel.md` — seguido de `guidelines/livewire.md` quando `livewire/livewire` também é exigido — é copiado para `docs/agents/coding_guidelines.md` quando o arquivo não existe, e `AGENTS.md` §2 + `CLAUDE.md` citam ele como obrigatório. A cópia é escrita à mão: nunca regenerada, nunca adotada, livre para editar. `/update` traz as revisões posteriores do upstream para ela.
+- **Camada de convenções da stack** — em alvo Laravel (`composer.json` com `laravel/framework`), `guidelines/laravel.md` — seguido de `guidelines/inertia.md` + `guidelines/react.md` ou `guidelines/vue.md` quando o `package.json` exige `@inertiajs/react` / `@inertiajs/vue3`, ou de `guidelines/livewire.md` quando `livewire/livewire` é exigido — é copiado para `docs/agents/coding_guidelines.md` quando o arquivo não existe, e `AGENTS.md` §2 + `CLAUDE.md` citam ele como obrigatório. A cópia é escrita à mão: nunca regenerada, nunca adotada, livre para editar. `/update` traz as revisões posteriores do upstream para ela.
 - Filtros `+id` / `-id` geram só um subconjunto (ex.: `/ai-context +AGENTS +architecture`).
 
 ### `/ralph` — lançador de execução
@@ -156,7 +156,7 @@ Lançador do `scripts/ralph.sh` de dentro do Claude Code. Resolve o documento de
 Clona o harness do GitHub (`jnariai/jharness`, `main` por padrão) num diretório temporário e atualiza duas coisas:
 
 1. **O harness** — quando o plugin instalado difere do upstream, roda `claude plugin marketplace update` + `claude plugin update jharness@<marketplace>`. Reinicie o Claude Code para carregar a nova versão. Plugin não gerenciado pelo Claude Code (ex.: checkout via `--plugin-dir`) fica intocado.
-2. **As coding guidelines do projeto** — `scripts/sync-guidelines.sh` compara `docs/agents/coding_guidelines.md` com as guidelines do upstream para a stack do projeto (`guidelines/laravel.md`, mais `guidelines/livewire.md` em projetos Livewire):
+2. **As coding guidelines do projeto** — `scripts/sync-guidelines.sh` compara `docs/agents/coding_guidelines.md` com as guidelines do upstream para a stack do projeto (`guidelines/laravel.md`, mais a camada Inertia + React/Vue ou Livewire que o projeto usa):
 
 | Arquivo local | Resultado |
 |---|---|
@@ -206,6 +206,8 @@ Gates verdes com árvore limpa → fase já estava implementada em HEAD: marcada
 Primeira regra que resolver: `--test-cmd` → `RALPH_TEST_CMD` → detecção por manifest (Laravel Sail → `composer test` → `php artisan test` → `npm test` → `pytest` → `go test ./...` → `cargo test`) → nada resolvido = gate 2 pulado com aviso alto (gate 3 segura sozinho).
 
 Projeto Laravel Sail: a suite roda **dentro do container** (`vendor/bin/sail test`); containers parados abortam no preflight — todo gate 2 falharia e queimaria ciclos à toa.
+
+Lint: quando o comando é detectado num projeto Laravel e o `composer.json` define um script `lint`, o gate 2 roda ele antes — `composer lint && composer test`, ou os dois via Sail. A camada de convenções coloca Pint, Larastan, Rector e `scripts/grep-gates.sh` atrás do `composer lint`. `--test-cmd` e `RALPH_TEST_CMD` são usados como vieram.
 
 ### Opções e variáveis
 
@@ -347,8 +349,11 @@ agents/                        specifier, clarifier, planner,
                                ai-context-{inspector,core,docs}
 guidelines/
   laravel.md                   convenções opinativas de Laravel
+  inertia.md                   contrato Inertia comum a React e Vue
+  react.md                     camada React sobre o inertia.md
+  vue.md                       camada Vue sobre o inertia.md
   livewire.md                  camada Livewire sobre o laravel.md
-                               /ai-context compõe os dois no projeto Laravel
+                               /ai-context compõe a stack no projeto Laravel
                                como docs/agents/coding_guidelines.md
 scripts/
   ralph.sh                     orquestrador de execução por fases

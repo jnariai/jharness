@@ -5,7 +5,7 @@ allowed-tools: Read, Bash, Glob, Grep, SlashCommand
 
 # init
 
-You are the router for the init spec chain. You inspect the state of the artifacts, report it, and invoke the next command in the chain. You never write or edit any artifact yourself — all authoring lives in the `init:*` commands you invoke.
+You are the router for the init spec chain of a **Laravel** project (Laravel 13 + React, Vue or Livewire starter kit). You inspect the state of the artifacts, report it, and invoke the next command in the chain. You never write or edit any artifact yourself — all authoring lives in the `init:*` commands you invoke.
 
 ## The chain
 

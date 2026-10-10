@@ -44,9 +44,12 @@ Any check fails → halt with `precondition_failed: <reason>` instead of produci
 - More than 3 markers → recommend clarification before planning.
 - Quantified ACs over qualitative ("latency p95 < 200ms", never "fast").
 - `light` tier → omit FLEXIBLE and Distribution by Repo.
-- Architecture references provided → SPEC MUST name the source files and cite ≥ 1 concrete rule (e.g. controller → service delegation). Missing → add `[NEEDS CLARIFICATION] Missing architecture guidance source (run /ai-context).` — never silent.
+- Architecture references provided → SPEC MUST name the source files and cite ≥ 1 concrete rule from `docs/agents/coding_guidelines.md` when present (e.g. entry point → one Action; events for cross-context reactions). Missing → add `[NEEDS CLARIFICATION] Missing architecture guidance source (run /ai-context).` — never silent.
 - **Verify code-shaped literals before freezing them in RIGID** — endpoint paths, queue/topic names, env vars, file paths, class names: Grep/Glob first. Found → append `(verified at <file>:<line>)`. Not found → `[NEEDS CLARIFICATION]` with the candidate string and sources checked. Applies only to literals RIGID freezes; illustrative strings belong in FLEXIBLE.
 - Init chain artifacts conflict with the confirmed ACs → the ACs win; flag the conflict as `[NEEDS CLARIFICATION]`.
+- **Contexts**: list in Metadata the bounded contexts the feature touches, by the names declared in `.spec/init/project-description.md` (or the existing `app/Actions/<Context>/` folders). A requirement that changes another context's data says whether it happens **together** (same transaction, the caller sees the result) or as a **reaction** (after the fact, may run later) — never left implicit.
+- **Permissions are abilities**: an RF that restricts who may act names the ability (`refundInvoices`) or the record rule ("only the invoice's issuer"), never a role check. A new ability is listed under Contracts as `CT-XX: ability <name>`.
+- **Domain failures**: an RF's unwanted-behavior clause names the observable outcome (message shown, state unchanged), never an HTTP status — the guidelines map failure kinds to responses once.
 
 ## Constraints
 
@@ -64,6 +67,7 @@ Any check fails → halt with `precondition_failed: <reason>` instead of produci
 - Source: developer description via /plan
 - Service: <service/repo name>
 - Tier: light | standard | complete
+- Contexts: <Context list>
 - Version: 1.0
 - Architecture references: <file list | missing>
 
@@ -111,7 +115,7 @@ flowchart LR
 - RNF-01: <requirement with quantified threshold>
 
 ## FLEXIBLE (Implementation Suggestions)
-- <Internal structure, patterns, naming suggestions>
+- <Internal structure in the guidelines' vocabulary: Actions per intent (`app/Actions/<Context>/`), model transitions, `Get*` reads with `*Filter`, View DTOs, events + listeners, gateways>
 
 ## Acceptance Criteria Summary
 | ID | Criterion | Testable? |

@@ -65,7 +65,8 @@ Resolve the description per the Input table. Then derive:
 
 Single parallel probe batch (Bash `test -f` + Read only what exists):
 
-- `AGENTS.md`, `docs/agents/architecture.md`, `docs/agents/domain_rules.md`, `.github/copilot-instructions.md`
+- `composer.json` — must require `laravel/framework`; otherwise stop: this harness plans Laravel projects only.
+- `AGENTS.md`, `docs/agents/coding_guidelines.md`, `docs/agents/architecture.md`, `docs/agents/domain_rules.md`, `.github/copilot-instructions.md`
 - Init chain: `.spec/init/project-description.md`, `.spec/init/user-stories.md`, `.spec/init/database-schema.md`, `.spec/init/project-phases.md`
 - Resume probe: `.spec/features/[slug]/SPEC.md`, `.spec/features/[slug]/PLAN.md`, `.spec/features/[slug]/PHASES.md`
 
@@ -83,13 +84,13 @@ Present `summary`, the ACs (drafted ones flagged), `slug`, and `tier`. The devel
 
 ### 4 — Architecture gate
 
-1. `AGENTS.md` or `docs/agents/` present → architecture references = those paths (prefer `architecture.md` + `domain_rules.md`).
+1. `AGENTS.md` or `docs/agents/` present → architecture references = those paths, `coding_guidelines.md` first (the Laravel convention layer: contexts, Actions, entry points, View DTOs, events), then `architecture.md` + `domain_rules.md`. `coding_guidelines.md` missing while the rest exists → warn `convention layer missing — run /jharness:ai-context to seed it` and continue.
 2. Absent but `.github/copilot-instructions.md` present → use it as fallback; warn `legacy architecture source — run /ai-context to migrate`.
 3. Neither → AskUserQuestion: "AGENTS context tree not found. Run `/ai-context` first (recommended) or proceed without architecture guidance?" Proceeding → every downstream prompt carries `architecture_reference_status: missing` and the agents emit their warning markers instead of silently planning.
 
 ### 5 — Delegate to `specifier`
 
-**Input** (paths + short prose, see Handoff budget): confirmed summary + ACs, `slug`, `tier`, architecture reference paths (or `missing` flag), init chain paths that exist, description file path when the input was a file.
+**Input** (paths + short prose, see Handoff budget): confirmed summary + ACs, `slug`, `tier`, architecture reference paths (or `missing` flag), init chain paths that exist, description file path when the input was a file. The bounded contexts come from `.spec/init/project-description.md` when present, otherwise from the existing `app/Actions/<Context>/` folders.
 
 **Verify on disk** (yourself, Bash):
 

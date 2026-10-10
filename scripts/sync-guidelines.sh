@@ -4,14 +4,19 @@
 # (docs/agents/coding_guidelines.md) in line with a jharness source tree.
 #
 # The project file is composed from the harness's guidelines/*.md for the
-# detected stack: laravel.md, plus livewire.md when the project uses Livewire
-# (joined by a `---` rule, harness-meta blocks stripped).
+# detected stack (joined by a `---` rule, harness-meta blocks stripped):
+#   laravel           laravel.md
+#   laravel-react     laravel.md + inertia.md + react.md  (package.json: @inertiajs/react)
+#   laravel-vue       laravel.md + inertia.md + vue.md    (package.json: @inertiajs/vue3)
+#   laravel-livewire  laravel.md + livewire.md            (composer.json: livewire/livewire)
+# Inertia wins over Livewire when a project somehow requires both.
 #
 # The source is normally a fresh clone of the harness from GitHub (see
 # commands/update.md). When the source is a git repository, every past revision
 # of the guidelines is known — including the old single-file
-# guidelines/laravel-livewire.md layout — so a local copy that byte-matches ANY
-# of them is provably unedited and safe to refresh. A copy that matches none was
+# guidelines/laravel-livewire.md layout, and the laravel.md-only composition an
+# Inertia project received before inertia.md existed — so a local copy that
+# byte-matches ANY of them is provably unedited and safe to refresh. A copy that matches none was
 # edited by hand and is never overwritten without --force.
 #
 # Usage:
@@ -19,7 +24,7 @@
 #   scripts/sync-guidelines.sh --source <harness-dir> --print-upstream [target]
 #
 # Output, one record per line:
-#   STACK laravel|laravel-livewire|none
+#   STACK laravel|laravel-react|laravel-vue|laravel-livewire|none
 #   UPSTREAM <sha12>|-
 #   GUIDELINES <status> <path>
 #
@@ -44,7 +49,7 @@ while [ $# -gt 0 ]; do
     --check) CHECK=1; shift ;;
     --force) FORCE=1; shift ;;
     --print-upstream) PRINT=1; shift ;;
-    -h|--help) sed -n '2,29p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,34p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*) die "unknown option $1" ;;
     *) [ -z "$TARGET" ] || die "only one target allowed"; TARGET="$1"; shift ;;
   esac
@@ -65,9 +70,13 @@ strip() {
 }
 
 detect_stack() {
-  local c="$TARGET/composer.json"
+  local c="$TARGET/composer.json" p="$TARGET/package.json"
   if [ -f "$c" ] && grep -q '"laravel/framework"' "$c"; then
-    if grep -q '"livewire/livewire"' "$c"; then echo laravel-livewire; else echo laravel; fi
+    if [ -f "$p" ] && grep -q '"@inertiajs/react"' "$p"; then echo laravel-react
+    elif [ -f "$p" ] && grep -q '"@inertiajs/vue3"' "$p"; then echo laravel-vue
+    elif grep -q '"livewire/livewire"' "$c"; then echo laravel-livewire
+    else echo laravel
+    fi
     return
   fi
   echo none
@@ -75,15 +84,23 @@ detect_stack() {
 
 STACK=$(detect_stack)
 
-# Files composed for the stack, in order, and the pre-split single file that
-# history may still hold for it.
+# Files composed for the stack, in order, plus the older compositions history
+# may still hold for it (each a space-separated file list, tried in order).
 FILES=()
-LEGACY=""
+ALTS=()
 case "$STACK" in
   laravel) FILES=(guidelines/laravel.md) ;;
+  laravel-react)
+    FILES=(guidelines/laravel.md guidelines/inertia.md guidelines/react.md)
+    ALTS=("guidelines/laravel.md")
+    ;;
+  laravel-vue)
+    FILES=(guidelines/laravel.md guidelines/inertia.md guidelines/vue.md)
+    ALTS=("guidelines/laravel.md")
+    ;;
   laravel-livewire)
     FILES=(guidelines/laravel.md guidelines/livewire.md)
-    LEGACY=guidelines/laravel-livewire.md
+    ALTS=("guidelines/laravel-livewire.md")
     ;;
 esac
 
@@ -97,24 +114,35 @@ compose() {
   done
 }
 
-# compose_at <commit> — the same composition as it stood at that commit;
-# fails when the commit holds neither the split files nor the legacy file.
-compose_at() {
+# compose_files_at <commit> <file>... — those files as they stood at that
+# commit, composed; fails when the commit lacks any of them.
+compose_files_at() {
   local c="$1" f first=1
-  for f in "${FILES[@]}"; do
-    git -C "$SRC" cat-file -e "$c:$f" 2>/dev/null || { first=-1; break; }
+  shift
+  for f in "$@"; do
+    git -C "$SRC" cat-file -e "$c:$f" 2>/dev/null || return 1
   done
-  if [ "$first" -eq 1 ]; then
-    for f in "${FILES[@]}"; do
-      [ "$first" -eq 1 ] || printf '\n---\n\n'
-      first=0
-      git -C "$SRC" show "$c:$f" | strip
-    done
-  elif [ -n "$LEGACY" ] && git -C "$SRC" cat-file -e "$c:$LEGACY" 2>/dev/null; then
-    git -C "$SRC" show "$c:$LEGACY" | strip
-  else
-    return 1
+  for f in "$@"; do
+    [ "$first" -eq 1 ] || printf '\n---\n\n'
+    first=0
+    git -C "$SRC" show "$c:$f" | strip
+  done
+}
+
+# matches_at <commit> — true when the local copy byte-matches the stack's
+# composition, or any older composition, as it stood at that commit.
+matches_at() {
+  local c="$1" alt
+  if compose_files_at "$c" "${FILES[@]}" > "$OLD" && cmp -s "$OLD" "$LOCAL"; then
+    return 0
   fi
+  for alt in ${ALTS[@]+"${ALTS[@]}"}; do
+    # shellcheck disable=SC2086
+    if compose_files_at "$c" $alt > "$OLD" && cmp -s "$OLD" "$LOCAL"; then
+      return 0
+    fi
+  done
+  return 1
 }
 
 if [ "$STACK" != none ]; then
@@ -156,7 +184,7 @@ classify() {
   if [ "$IS_GIT" -eq 1 ]; then
     local h
     while read -r h; do
-      if compose_at "$h" > "$OLD" && cmp -s "$OLD" "$LOCAL"; then
+      if matches_at "$h"; then
         echo outdated
         return
       fi

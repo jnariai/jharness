@@ -19,7 +19,7 @@ $ARGUMENTS
 Read the existing project description and produce a single document at **`.spec/init/user-stories.md`** that:
 
 1. Identifies every **user type** (persona) the system serves.
-2. Groups functionality into **feature areas**.
+2. Groups functionality into **feature areas**, each inside one **bounded context** declared in the project description.
 3. Writes **user stories** in the `As a / I want to / So that` form, each with concrete **acceptance criteria** and an **expected result**.
 4. Assigns a **priority** to each story and tracks status in an appendix table.
 
@@ -30,7 +30,7 @@ Read the existing project description and produce a single document at **`.spec/
 Before asking anything, read **`.spec/init/project-description.md`**. This is the input to this command.
 
 - If the file is missing, stop and tell the developer to run `init:project-description` first.
-- Extract from it: the user types, core concepts, core workflows, tech stack constraints, and the MVP boundary.
+- Extract from it: the user types, core concepts, **bounded contexts**, **abilities**, core workflows, tech stack (frontend: React, Vue or Livewire; kit with or without auth), and the MVP boundary.
 - Also scan any other files already under `.spec/` for decisions already made.
 
 Match the **language** of the project description (write the stories in the same language the developer used).
@@ -60,7 +60,8 @@ Any output → warn the developer ("input changed after this artifact was genera
 
 Derive as many stories as you can directly from the description, then find what's undefined. Ask the developer only about gaps that change the shape or scope of the stories — do not interrogate on things the description already answers. Focus on:
 
-- **Persona boundaries** — who can do what; overlaps and permissions.
+- **Persona boundaries** — who can do what, expressed through the **abilities** of the project description (a story never says "admins can…" without the ability behind it). A new permission is a new ability; add it to the description's `## Abilities` table in the same run, with the developer's confirmation.
+- **Starter-kit stories** — when the kit ships with auth, sign-up, login, password reset, email verification, profile and settings already exist; write them as `Identity` stories anyway, so the refactor of the kit's code into Actions is traceable.
 - **MVP vs deferred** — which stories are in the first version; what is explicitly out.
 - **Priority** — which flows are must-have (High) vs nice-to-have (Medium/Low).
 - **Acceptance edge cases** — limits, states, failure paths that make a story testable.
@@ -88,6 +89,8 @@ Write to `.spec/init/user-stories.md` (create the `.spec/init/` directories if m
 ---
 
 ## 1. <Feature Area>
+
+**Context:** <one context from the project description's Bounded Contexts table>
 
 ### US-1.1: <Short Story Title>
 **As a** <persona>
@@ -122,6 +125,8 @@ Rules for the document:
 - **Title** = project name + `— User Stories`.
 - **Line 3** is the machine-owned **input stamp**: `<!-- inputs: project-description.md@sha256:<12 chars> -->`, the checksum being `sha256sum .spec/init/project-description.md | cut -c1-12` over the file as read in step 1. Refresh it on **every** run, including re-run Edits — downstream commands use it to detect drift. Never preserve a stale stamp as a "developer edit".
 - Number feature areas (`## 1.`, `## 2.` …) and stories within them (`US-1.1`, `US-1.2` …). Keep IDs stable.
+- Every feature area has a `**Context:**` line naming exactly one context from the project description. A story that spans two contexts belongs to the one whose data it changes first; its acceptance criteria name the reaction in the other context ("the order is marked paid" after a payment).
+- Acceptance criteria describe behavior the user or system can observe — states, limits, messages, permissions — never classes, tables or frameworks.
 - Every story uses the full `As a / I want to / So that` triple, an **Acceptance Criteria** checkbox list, and an **Expected Result** line.
 - Acceptance criteria must be **concrete and testable** — state limits, states, and failure paths (e.g. "reset link valid for 60 minutes", "image max size 5MB"), not vague intent.
 - Cover every user type and every core workflow from the project description. No invented features — keep each story traceable to the description or a developer decision.
@@ -162,6 +167,11 @@ head -1 "$F" | grep -qE '^# .+ — User Stories$'
 [ "$(sed -n '3p' "$F")" = "<!-- inputs: project-description.md@sha256:$(sha256sum .spec/init/project-description.md | cut -c1-12) -->" ]
 grep -Fq '**User Types:**' "$F"
 grep -Fq '## Appendix: User Story Status' "$F"
+# every feature area names a context declared in the project description (loop prints nothing)
+[ "$(grep -cE '^## [0-9]+\. ' "$F")" -eq "$(grep -cE '^\*\*Context:\*\* ' "$F")" ]
+for c in $(grep -oE '^\*\*Context:\*\* [A-Za-z]+' "$F" | awk '{print $2}' | sort -u); do
+  grep -Eq "^\| $c \|" .spec/init/project-description.md || echo "context not in project description: $c"
+done
 STORIES=$(grep -cE '^### US-[0-9]+\.[0-9]+:' "$F"); [ "$STORIES" -ge 1 ]
 [ "$STORIES" -eq "$(grep -c '^\*\*As a\*\*' "$F")" ]                    # every story has the persona line
 [ "$STORIES" -eq "$(grep -c '^\*\*Acceptance Criteria:\*\*' "$F")" ]    # every story has criteria

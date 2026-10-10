@@ -86,6 +86,12 @@
 #        Cargo.toml                                -> cargo test
 #   4. nothing resolved -> loud warning + gate 2 skipped (gate 3 holds alone)
 #
+# Lint: when the command was DETECTED for a Laravel project (Sail, composer,
+# artisan) and composer.json defines a `lint` script, gate 2 runs it first:
+# `composer lint && composer test`, or both through Sail. The convention layer
+# puts Pint, Larastan, Rector and scripts/grep-gates.sh behind `composer lint`.
+# --test-cmd and RALPH_TEST_CMD are taken verbatim — no lint is added.
+#
 # Laravel Sail: the suite runs inside the container, so Sail takes precedence
 # over `composer test`. Containers down -> abort in preflight (every gate 2
 # would fail, burning fix cycles).
@@ -361,12 +367,17 @@ resolve_test_cmd() {
 
   # Sail comes BEFORE composer/npm: in a dockerized Laravel project the host
   # has neither PHP nor database access, and `composer test` would lie as a gate.
+  local lint=""
+  if [ -f composer.json ] && grep -qE '"lint"[[:space:]]*:' composer.json; then
+    lint="composer lint && "
+  fi
+
   if [ -n "$SAIL_BIN" ]; then
-    TEST_CMD="$SAIL_BIN test"
+    TEST_CMD="${lint:+$SAIL_BIN $lint}$SAIL_BIN test"
   elif [ -f composer.json ] && grep -qE '"test"[[:space:]]*:' composer.json; then
-    TEST_CMD="composer test"
+    TEST_CMD="${lint}composer test"
   elif [ -f artisan ]; then
-    TEST_CMD="php artisan test"
+    TEST_CMD="${lint}php artisan test"
   elif [ -f package.json ] && grep -qE '"test"[[:space:]]*:' package.json; then
     TEST_CMD="npm test"
   elif [ -f pytest.ini ] || { [ -f pyproject.toml ] && grep -qF '[tool.pytest' pyproject.toml; }; then
