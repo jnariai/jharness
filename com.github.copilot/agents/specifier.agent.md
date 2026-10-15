@@ -47,6 +47,12 @@ Any check fails → halt with `precondition_failed: <reason>` instead of produci
 - Architecture references provided → SPEC MUST name the source files and cite ≥ 1 concrete rule (e.g. controller → service delegation). Missing → add `[NEEDS CLARIFICATION] Missing architecture guidance source (run /ai-context).` — never silent.
 - **Verify code-shaped literals before freezing them in RIGID** — endpoint paths, queue/topic names, env vars, file paths, class names: Grep/Glob first. Found → append `(verified at <file>:<line>)`. Not found → `[NEEDS CLARIFICATION]` with the candidate string and sources checked. Applies only to literals RIGID freezes; illustrative strings belong in FLEXIBLE.
 - Init chain artifacts conflict with the confirmed ACs → the ACs win; flag the conflict as `[NEEDS CLARIFICATION]`.
+- *Laravel projects only* (`composer.json` requires `laravel/framework`) — `docs/agents/coding_guidelines.md` is the convention layer:
+  - The cited architecture rule comes from `coding_guidelines.md` when present (e.g. entry point → one Action; events for cross-context reactions).
+  - **Contexts**: add `- Contexts: <Context list>` to Metadata — the bounded contexts the feature touches, by the names declared in `.spec/init/project-description.md` (or the existing `app/Actions/<Context>/` folders). A requirement that changes another context's data says whether it happens **together** (same transaction, the caller sees the result) or as a **reaction** (after the fact, may run later) — never left implicit.
+  - **Permissions are abilities**: an RF that restricts who may act names the ability (`refundInvoices`) or the record rule ("only the invoice's issuer"), never a role check. A new ability is listed under Contracts as `CT-XX: ability <name>`.
+  - **Domain failures**: an RF's unwanted-behavior clause names the observable outcome (message shown, state unchanged), never an HTTP status — the guidelines map failure kinds to responses once.
+  - FLEXIBLE uses the guidelines' vocabulary: Actions per intent (`app/Actions/<Context>/`), model transitions, `Get*` reads with `*Filter`, View DTOs, events + listeners, gateways.
 
 ## Constraints
 

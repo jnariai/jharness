@@ -35,6 +35,13 @@ Before asking anything, read **`.spec/init/project-description.md`**. This is th
 
 Match the **language** of the project description (write the stories in the same language the developer used).
 
+### Laravel profile (only when the stack is Laravel)
+
+The profile applies when the project description's `## Tech Stack` names Laravel (or `composer.json` requires `laravel/framework`). For any other stack, skip every part of this command marked *Laravel profile*. When it applies, it wins over the generic rules wherever they differ.
+
+- Also extract the **bounded contexts**, the **abilities**, and the frontend (React, Vue or Livewire; kit with or without auth) from the project description.
+- Every feature area sits inside **one bounded context** declared in the project description.
+
 ### If the target file already exists (re-run)
 
 Re-running this command must **update** the existing document, never rebuild it from scratch — `.spec` belongs to the developer, and manual edits there are decisions, not noise.
@@ -64,6 +71,11 @@ Derive as many stories as you can directly from the description, then find what'
 - **MVP vs deferred** — which stories are in the first version; what is explicitly out.
 - **Priority** — which flows are must-have (High) vs nice-to-have (Medium/Low).
 - **Acceptance edge cases** — limits, states, failure paths that make a story testable.
+
+*Laravel profile* — also:
+
+- **Persona boundaries** are expressed through the **abilities** of the project description (a story never says "admins can…" without the ability behind it). A new permission is a new ability; add it to the description's `## Abilities` table in the same run, with the developer's confirmation.
+- **Starter-kit stories** — when the kit ships with auth, sign-up, login, password reset, email verification, profile and settings already exist; write them as `Identity` stories anyway, so the refactor of the kit's code into Actions is traceable.
 - **Missing flows** — anything implied by the concepts/workflows but not yet a story.
 
 Use `AskUserQuestion` for discrete decisions with clear options (e.g. priority, in/out of MVP). Ask real open questions in plain text when the answer is not a menu. Batch related questions; don't drip one at a time. When something stays undecided, mark it as an open question rather than inventing an answer.
@@ -123,6 +135,8 @@ Rules for the document:
 - **Line 3** is the machine-owned **input stamp**: `<!-- inputs: project-description.md@sha256:<12 chars> -->`, the checksum being `sha256sum .spec/init/project-description.md | cut -c1-12` over the file as read in step 1. Refresh it on **every** run, including re-run Edits — downstream commands use it to detect drift. Never preserve a stale stamp as a "developer edit".
 - Number feature areas (`## 1.`, `## 2.` …) and stories within them (`US-1.1`, `US-1.2` …). Keep IDs stable.
 - Every story uses the full `As a / I want to / So that` triple, an **Acceptance Criteria** checkbox list, and an **Expected Result** line.
+- *Laravel profile*: every feature area has a `**Context:** <Context>` line right under its `## N.` heading, naming exactly one context from the project description's Bounded Contexts table. A story that spans two contexts belongs to the one whose data it changes first; its acceptance criteria name the reaction in the other context ("the order is marked paid" after a payment).
+- *Laravel profile*: acceptance criteria describe behavior the user or system can observe — states, limits, messages, permissions — never classes, tables or frameworks.
 - Acceptance criteria must be **concrete and testable** — state limits, states, and failure paths (e.g. "reset link valid for 60 minutes", "image max size 5MB"), not vague intent.
 - Cover every user type and every core workflow from the project description. No invented features — keep each story traceable to the description or a developer decision.
 - The **appendix table** lists every story with its priority and status (`Pending` by default). Order roughly by priority.
@@ -169,6 +183,19 @@ STORIES=$(grep -cE '^### US-[0-9]+\.[0-9]+:' "$F"); [ "$STORIES" -ge 1 ]
 # body story IDs == appendix table IDs (diff must be empty)
 diff <(grep -oE '^### US-[0-9]+\.[0-9]+' "$F" | sed 's/### //' | sort -u) \
      <(grep -oE '^\| US-[0-9]+\.[0-9]+ ' "$F" | grep -oE 'US-[0-9]+\.[0-9]+' | sort -u)
+```
+
+*Laravel profile* — run these as well when the project description's Tech Stack names Laravel:
+
+```bash
+F=.spec/init/user-stories.md
+if awk '/^## Tech Stack/{f=1;next} /^## /{f=0} f' .spec/init/project-description.md | grep -qi laravel; then
+  # every feature area names a context declared in the project description (loop prints nothing)
+  [ "$(grep -cE '^## [0-9]+\. ' "$F")" -eq "$(grep -cE '^\*\*Context:\*\* ' "$F")" ]
+  for c in $(grep -oE '^\*\*Context:\*\* [A-Za-z]+' "$F" | awk '{print $2}' | sort -u); do
+    grep -Eq "^\| $c \|" .spec/init/project-description.md || echo "context not in project description: $c"
+  done
+fi
 ```
 
 ### 6. Close out

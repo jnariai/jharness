@@ -33,6 +33,7 @@ Before asking anything, read **`.spec/init/project-description.md`** and **`.spe
 - Extract: the core concepts (the nouns → tables), the workflows and stories (the fields, states, and relationships), the user types (auth/roles), and any limits or numbers stated (→ column constraints).
 - Extract the **framework and ORM** from the project description's Tech Stack section — they drive the naming conventions below. Confirm against the codebase manifest (`composer.json`, `package.json`, `pyproject.toml`, `go.mod`, `Gemfile`, …) when one exists.
 - Also scan any other files already under `.spec/` for schema decisions already made, and inspect the project for an existing schema (migrations directory, ORM models/entities, `schema.prisma`, `*.sql` files) so you extend rather than contradict what's there.
+- *Laravel profile* (the Tech Stack names Laravel — see **DB Guidelines → Laravel profile**): also extract the **bounded contexts** and the concept → context mapping — every table lands in the context that owns its concept. Inspect `database/migrations/` and `app/Models/`. The starter kit's own tables (`users`, `password_reset_tokens`, `sessions`, `cache`, `jobs`, `failed_jobs`) already exist: model them exactly as their migrations declare them (keys, columns) and only add what the project needs (`public_id` on `users`, roles).
 
 Match the **language** of the project description for prose and comments (keep table/column identifiers in English, snake_case).
 
@@ -78,6 +79,15 @@ Derive as much of the schema as you can directly from the docs, then find what's
 - **Soft deletes vs hard deletes** — which entities need `deleted_at`.
 - **Categorical fields** — every status/type/category/priority/role → which values seed the lookup table.
 - **Uniqueness & required fields** — which columns are `unique`, which are `not null`.
+
+*Laravel profile* — also, replacing the generic soft-delete and categorical bullets:
+
+- **Cardinality** — whether a many-to-many link carries data of its own (then it is an entity table, not a pivot).
+- **Ownership & tenancy** — `tenant_id` only when the project description declares tenancy.
+- **End of life** — for each entity: a status transition (archived), a hard delete, or — only when restoring is a real feature — soft deletes.
+- **Delete behavior** — for each foreign key: cascade (owned child), restrict (reference) or set null (optional link).
+- **Exposure** — which entities appear in a URL, a page or an API response; they get a `public_id`, and its prefix (`ord_`).
+- **Business enums** — every status/type/category/kind/role → the lookup table and its values.
 
 Use `AskUserQuestion` for discrete decisions with clear options. Ask real open questions in plain text when the answer is not a menu. Batch related questions; don't drip one at a time. When something stays undecided, mark it as an open question rather than inventing a column.
 
@@ -143,6 +153,33 @@ Rules for the document:
 - The DBML must be valid: every `ref` points at a real `table.column`; every foreign key column exists on its table.
 - Keep every table traceable to a core concept, workflow, or story. No invented entities — if you need one to make a relationship work, note why.
 - If gaps remain unresolved, add a short `## Open Questions` section at the end. Otherwise omit it.
+- *Laravel profile*: the DBML is ordered per context (lookup tables first, then domain tables, then link tables) and every context closes with its `TableGroup`; **Lookup Table Seeds** lists table → the enum it mirrors → its values, in `snake_case`, exactly as the string-backed enum's backing values (`invoice_status` → `InvoiceStatus` → `draft`, `issued`, `paid`, `void`) — the migration that creates the table inserts these from the enum's cases; **Notes & Conventions** also lists the exposed tables with their `public_id` prefixes and, for each soft-deleted table, the story that needs restoring. A table in the Laravel shape:
+
+```dbml
+Table invoice_status {
+  id bigint [pk, increment]
+  label varchar [unique, not null]
+}
+
+Table invoices {
+  id bigint [pk, increment]
+  public_id varchar(40) [unique, not null, note: 'prefix inv_']
+  customer_id bigint [ref: > customers.id, not null, note: 'on delete restrict']
+  invoice_status_id bigint [ref: > invoice_status.id, not null, note: 'on delete restrict']
+  number varchar [unique, not null]
+  total_cents bigint [not null]
+  currency varchar(3) [not null]
+  pdf_path varchar [null]
+  issued_at timestamp [null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+TableGroup Billing {
+  invoice_status
+  invoices
+}
+```
 
 ## DB Guidelines
 
@@ -170,6 +207,46 @@ When no framework/ORM is detected, use this default profile:
 - Store the file path as a **string column** directly in the table (e.g. `avatar_path`, `document_path`, `attachment_path`).
 - Use a descriptive `_path` suffix to signal it holds a file path.
 - If a record can have **multiple** files, create a related table (e.g. `project_attachments`) with a `file_path` string column and a foreign key to the parent.
+
+### Laravel profile (only when the stack is Laravel)
+
+Applies when the project description's Tech Stack names Laravel (or `composer.json` requires `laravel/framework`); it replaces the generic stack conventions and lookup-table shape above. These mirror the *Data conventions*, *Public ids*, *Enums and lookup tables* and *Relations* sections of the Laravel coding guidelines. When the project already carries `docs/agents/coding_guidelines.md`, it wins over this list.
+
+#### Naming and keys (Eloquent defaults)
+
+- Tables **plural, snake_case** (`invoices`, `invoice_lines`). Columns snake_case.
+- Every domain, lookup and link table the project adds has `id bigint [pk, increment]`. No UUID or ULID primary keys. Framework-owned tables keep the keys their migrations declare — `sessions.id varchar`, `cache.key varchar`, `password_reset_tokens.email varchar` — never rewrite them to fit this rule.
+- Foreign keys are `<singular>_id bigint`, always declared with `ref:` and a `note: 'on delete cascade|restrict|set null'` — cascade for an owned child, restrict for a reference, set null for an optional link. No unconstrained id column.
+- `created_at` / `updated_at` on every domain table. `deleted_at` only on tables whose entity is restorable by a story.
+
+#### Public ids
+
+- Every entity that appears in a URL, a page, an API response or a webhook gets `public_id varchar(40) [unique, not null]` with a `note: 'prefix <xxx>_'` — a short lowercase prefix unique per table (`ord_`, `inv_`, `usr_`). The value is generated by the model (prefix + base58 ULID); the schema only declares the column.
+- Internal tables (lookups, ledger lines, link tables) have no `public_id`.
+
+#### Business enums: lookup tables
+
+- **No enum columns, ever.** A value the business names — status, type, category, kind, priority, role — gets a lookup table and a foreign key.
+- The lookup table is named after the concept, **singular**: `<entity>_<concept>` (`invoice_status`, `product_type`). It has exactly two columns: `id bigint [pk, increment]` and `label varchar [unique, not null]`. No timestamps, no `name`, `slug`, `description` or `is_active` — anything beyond `id` + `label` makes it a real entity.
+- The referencing column is `<lookup_table>_id` (`invoice_status_id`), `on delete restrict`.
+- `label` holds the enum's backing value verbatim (`paid`); display text is translated in code, never stored.
+- A closed **technical** set nobody joins on — currency, locale, timezone — stays a plain `varchar` column (`currency varchar(3)`).
+
+#### Link tables
+
+- A many-to-many link that is only two foreign keys is a pivot named after both singular tables, alphabetical (`product_tag`).
+- The moment the link carries anything else — a role, a status, a date, a position — or has a lifecycle, it is an **entity table** named after what it is (`family_members`, `enrollments`), with its own `id`, timestamps and, if exposed, `public_id`.
+
+#### Money, files and tenancy
+
+- Money is `<name>_cents bigint` plus `currency varchar(3)`; never `decimal` or `float`.
+- A file is a `<name>_path varchar` column; several files per record → a child table with `file_path`.
+- `tenant_id bigint [ref: > tenants.id, not null, note: 'on delete cascade']` on every tenant-owned table, only when the project description declares tenancy.
+
+#### Contexts
+
+- One `TableGroup <Context> { … }` per bounded context of the project description, named exactly like it.
+- Every table belongs to exactly one group; a lookup table sits in the group of the entity it qualifies. Infrastructure tables from the framework (`sessions`, `cache`, `jobs`, `failed_jobs`, `password_reset_tokens`) go in `TableGroup Infrastructure`.
 
 ### 4. Coverage check (key concepts → tables)
 
@@ -211,12 +288,33 @@ for t in $(grep -oE 'ref: *[<>-]+ *[a-z0-9_]+\.' "$F" | grep -oE '[a-z0-9_]+\.' 
 done
 ```
 
+*Laravel profile* — run these as well when the project description's Tech Stack names Laravel:
+
+```bash
+F=.spec/init/database-schema.md
+if awk '/^## Tech Stack/{f=1;next} /^## /{f=0} f' .spec/init/project-description.md | grep -qi laravel; then
+  # every foreign key declares its delete behavior (prints nothing)
+  grep -E '\[ref:' "$F" | grep -vE "note: 'on delete (cascade|restrict|set null)'" | sed 's/^/fk without delete behavior: /'
+  # lookup tables are id + label only (prints nothing)
+  awk '/^Table [a-z0-9_]+_(status|type|kind|category|priority|role|level) \{/{t=$2;f=1;next} f&&/^\}/{f=0} f&&NF&&$1!="id"&&$1!="label"{print "lookup column not allowed: " t "." $1}' "$F"
+  # every table sits in exactly one TableGroup, and every group is a declared context (prints nothing)
+  for t in $(grep -oE '^Table [a-z0-9_]+' "$F" | awk '{print $2}'); do
+    n=$(awk '/^TableGroup /{f=1;next} f&&/^\}/{f=0} f{print $1}' "$F" | grep -cx "$t")
+    [ "$n" -eq 1 ] || echo "table in $n groups: $t"
+  done
+  for g in $(grep -oE '^TableGroup [A-Za-z]+' "$F" | awk '{print $2}' | grep -vx Infrastructure); do
+    grep -Eq "^\| $g \|" .spec/init/project-description.md || echo "group is not a declared context: $g"
+  done
+fi
+```
+
 ### 6. Close out
 
 After writing, report:
 
 - The path written.
-- A count of tables broken down as: domain tables, lookup tables, pivots.
+- A count of tables broken down as: domain tables, lookup tables, pivots (*Laravel profile*: and per context).
+- *Laravel profile*: the exposed tables with their `public_id` prefixes.
 - The coverage table from step 4 (Key Concept | Table(s)) — every concept persisted or noted as not persisted.
 - Self-checks: all green — list any check that initially failed and how it was fixed (Red → Green).
 - Any open questions still needing the developer's decision.

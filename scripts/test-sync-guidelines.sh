@@ -4,8 +4,9 @@
 #
 # Zero rede: um repo git fake faz o papel do upstream, com o historico real do
 # layout — arquivo unico laravel-livewire.md (v1 sem harness-meta, v2 com), depois
-# o split em laravel.md + livewire.md, depois uma revisao do laravel.md — e
-# projetos fake fazem o papel do alvo.
+# o split em laravel.md + livewire.md, depois uma revisao do laravel.md, depois as
+# camadas Inertia (inertia.md + react.md + vue.md) — e projetos fake fazem o papel
+# do alvo.
 #
 # Uso: scripts/test-sync-guidelines.sh [nome-do-caso]   (exit 0 = tudo verde)
 
@@ -70,12 +71,20 @@ make_upstream() {
   { printf '# Laravel\n\n'; meta; printf 'laravel v2\n'; } > "$up/guidelines/laravel.md"
   commit laravel-v2
 
+  # c5 — camadas Inertia
+  { printf '# Inertia\n\n'; meta; printf 'inertia v1\n'; } > "$up/guidelines/inertia.md"
+  { printf '# React\n\n'; meta; printf 'react v1\n'; } > "$up/guidelines/react.md"
+  { printf '# Vue\n\n'; meta; printf 'vue v1\n'; } > "$up/guidelines/vue.md"
+  commit inertia
+
   printf '# LL\n\nlegacy v1\n' > "$EXP/legacy_v1"
   printf '# LL\n\nlegacy v2\n' > "$EXP/legacy_v2"
   printf '# Laravel\n\nlaravel v1\n' > "$EXP/laravel_v1"
   printf '# Laravel\n\nlaravel v2\n' > "$EXP/laravel_v2"
   { cat "$EXP/laravel_v1"; printf '%s' "$SEP"; printf '# Livewire\n\nlivewire v1\n'; } > "$EXP/composed_v1"
   { cat "$EXP/laravel_v2"; printf '%s' "$SEP"; printf '# Livewire\n\nlivewire v1\n'; } > "$EXP/composed_v2"
+  { cat "$EXP/laravel_v2"; printf '%s' "$SEP"; printf '# Inertia\n\ninertia v1\n'; printf '%s' "$SEP"; printf '# React\n\nreact v1\n'; } > "$EXP/react_v1"
+  { cat "$EXP/laravel_v2"; printf '%s' "$SEP"; printf '# Inertia\n\ninertia v1\n'; printf '%s' "$SEP"; printf '# Vue\n\nvue v1\n'; } > "$EXP/vue_v1"
 }
 
 # make_project <name> <composer-require-json>
@@ -83,6 +92,13 @@ make_project() {
   local p="$TMP/$1"
   mkdir -p "$p"
   printf '{"require": {%s}}\n' "$2" > "$p/composer.json"
+  echo "$p"
+}
+
+# make_inertia_project <name> <composer-require-json> <package-dependencies-json>
+make_inertia_project() {
+  local p; p=$(make_project "$1" "$2")
+  printf '{"dependencies": {%s}}\n' "$3" > "$p/package.json"
   echo "$p"
 }
 
@@ -96,6 +112,9 @@ make_project_with() {
 
 LARAVEL='"laravel/framework": "^12.0"'
 LIVEWIRE='"laravel/framework": "^12.0", "livewire/livewire": "^4.0"'
+INERTIA='"laravel/framework": "^13.0", "inertiajs/inertia-laravel": "^2.0"'
+REACT='"@inertiajs/react": "^2.0", "react": "^19.0"'
+VUE='"@inertiajs/vue3": "^2.0", "vue": "^3.5"'
 
 field() { awk -v k="$1" '$1==k{print $2}' "$2"; }
 
@@ -198,6 +217,107 @@ case_print_upstream() {
   [ ! -e "$p/docs" ] && ok "--print-upstream nao escreve" || bad "--print-upstream escreveu"
 }
 
+case_react_seed() {
+  local p; p=$(make_inertia_project react "$INERTIA" "$REACT")
+  run "$TMP/o" "$p"
+  assert_eq laravel-react "$(field STACK "$TMP/o")" "@inertiajs/react -> stack laravel-react"
+  assert_eq seeded "$(field GUIDELINES "$TMP/o")" "apply: seeded"
+  assert_same_file "$EXP/react_v1" "$p/docs/agents/coding_guidelines.md" "laravel.md + inertia.md + react.md"
+}
+
+case_vue_seed() {
+  local p; p=$(make_inertia_project vue "$INERTIA" "$VUE")
+  run "$TMP/o" "$p"
+  assert_eq laravel-vue "$(field STACK "$TMP/o")" "@inertiajs/vue3 -> stack laravel-vue"
+  assert_same_file "$EXP/vue_v1" "$p/docs/agents/coding_guidelines.md" "laravel.md + inertia.md + vue.md"
+}
+
+case_react_outdated_laravel_only() {
+  # Projeto Inertia semeado antes do inertia.md existir recebeu so o laravel.md.
+  local p; p=$(make_project_with reactold "$INERTIA" "$EXP/laravel_v1")
+  printf '{"dependencies": {%s}}\n' "$REACT" > "$p/package.json"
+  run "$TMP/o" --check "$p"
+  assert_eq outdated "$(field GUIDELINES "$TMP/o")" "copia antiga so-laravel num projeto react -> outdated"
+  run "$TMP/o" "$p"
+  assert_same_file "$EXP/react_v1" "$p/docs/agents/coding_guidelines.md" "atualizado para a composicao react"
+}
+
+case_inertia_wins_over_livewire() {
+  local p; p=$(make_inertia_project both "$LIVEWIRE" "$VUE")
+  run "$TMP/o" --check "$p"
+  assert_eq laravel-vue "$(field STACK "$TMP/o")" "inertia + livewire -> inertia vence"
+}
+
+case_package_without_inertia() {
+  local p; p=$(make_inertia_project lwpkg "$LIVEWIRE" '"alpinejs": "^3.0"')
+  run "$TMP/o" --check "$p"
+  assert_eq laravel-livewire "$(field STACK "$TMP/o")" "package.json sem inertia -> livewire"
+}
+
+case_inertia_v3() {
+  local p; p=$(make_inertia_project reactv3 "$INERTIA" '"@inertiajs/react": "^3.0"')
+  run "$TMP/o" --check "$p"
+  assert_eq laravel-react "$(field STACK "$TMP/o")" "@inertiajs/react ^3.0 -> laravel-react"
+}
+
+case_inertia_v1_laravel_only() {
+  local p; p=$(make_inertia_project reactv1 "$INERTIA" '"@inertiajs/react": "^1.0"')
+  run "$TMP/o" "$p"
+  assert_eq laravel "$(field STACK "$TMP/o")" "@inertiajs/react ^1.0 -> laravel"
+  assert_same_file "$EXP/laravel_v2" "$p/docs/agents/coding_guidelines.md" "Inertia 1 -> so laravel.md"
+  grep -q "not supported by the Inertia layer" "$TMP/o.err" && ok "aviso no stderr" || bad "sem aviso no stderr"
+}
+
+case_inertia_unreadable_laravel_only() {
+  local p; p=$(make_inertia_project vuestar "$INERTIA" '"@inertiajs/vue3": "latest"')
+  run "$TMP/o" --check "$p"
+  assert_eq laravel "$(field STACK "$TMP/o")" "@inertiajs/vue3 latest -> laravel"
+  grep -q "version unreadable" "$TMP/o.err" && ok "aviso de versao ilegivel" || bad "sem aviso de versao ilegivel"
+}
+
+case_inertia_lockfile_wins() {
+  # Constraint ilegivel no package.json, versao instalada no package-lock.json.
+  local p; p=$(make_inertia_project vuelock "$INERTIA" '"@inertiajs/vue3": "latest"')
+  printf '{"packages": {\n    "node_modules/@inertiajs/vue3": {\n      "version": "2.3.1"\n    }\n}}\n' > "$p/package-lock.json"
+  run "$TMP/o" --check "$p"
+  assert_eq laravel-vue "$(field STACK "$TMP/o")" "package-lock.json 2.3.1 -> laravel-vue"
+}
+
+case_inertia_lockfile_compact() {
+  # Lockfile compacto: a versao instalada (1.x) vence o constraint ^3.0.
+  local p; p=$(make_inertia_project reactcompact "$INERTIA" '"@inertiajs/react": "^3.0"')
+  printf '{"packages":{"node_modules/@inertiajs/react":{"version":"1.3.0"}}}\n' > "$p/package-lock.json"
+  run "$TMP/o" --check "$p"
+  assert_eq laravel "$(field STACK "$TMP/o")" "lockfile compacto 1.3.0 -> laravel"
+}
+
+case_inertia_lockfile_reordered() {
+  # Chaves reordenadas: "version" longe da chave do pacote, e outro pacote com
+  # "version" logo depois nao pode ser lido no lugar dele.
+  local p; p=$(make_inertia_project vuereorder "$INERTIA" '"@inertiajs/vue3": "latest"')
+  printf '{"packages": {\n  "node_modules/@inertiajs/vue3": {\n    "resolved": "x",\n    "integrity": "y",\n    "dev": true,\n    "license": "MIT",\n    "version": "3.0.2"\n  },\n  "node_modules/other": {\n    "version": "1.0.0"\n  }\n}}\n' > "$p/package-lock.json"
+  run "$TMP/o" --check "$p"
+  assert_eq laravel-vue "$(field STACK "$TMP/o")" "lockfile reordenado 3.0.2 -> laravel-vue"
+}
+
+case_inertia_livewire_legacy() {
+  # Projeto com Livewire + Inertia era composto como Livewire antes do Inertia vencer.
+  local v p both='"laravel/framework": "^13.0", "livewire/livewire": "^4.0", "inertiajs/inertia-laravel": "^2.0"'
+  for v in composed_v1 legacy_v2; do
+    p=$(make_project_with "lwreact_$v" "$both" "$EXP/$v")
+    printf '{"dependencies": {%s}}\n' "$REACT" > "$p/package.json"
+    run "$TMP/o" --check "$p"
+    assert_eq outdated "$(field GUIDELINES "$TMP/o")" "copia livewire intacta ($v) num projeto react+livewire -> outdated"
+    run "$TMP/o" "$p"
+    assert_same_file "$EXP/react_v1" "$p/docs/agents/coding_guidelines.md" "reescrita com a composicao react ($v)"
+  done
+  printf '# mine\n\nhand-written rule\n' > "$TMP/mine"
+  p=$(make_project_with lwvue_mod "$both" "$TMP/mine")
+  printf '{"dependencies": {%s}}\n' "$VUE" > "$p/package.json"
+  run "$TMP/o" --check "$p"
+  assert_eq modified "$(field GUIDELINES "$TMP/o")" "edicao manual num projeto vue+livewire -> modified"
+}
+
 case_usage() {
   "$SYNC" > /dev/null 2>&1
   assert_eq 2 "$?" "sem --source -> exit 2"
@@ -209,7 +329,7 @@ case_usage() {
 
 make_upstream
 
-CASES=(non_laravel laravel_only laravel_outdated seed outdated_legacy outdated_split modified non_git_source print_upstream usage)
+CASES=(non_laravel laravel_only laravel_outdated seed outdated_legacy outdated_split modified non_git_source print_upstream react_seed vue_seed react_outdated_laravel_only inertia_v3 inertia_v1_laravel_only inertia_unreadable_laravel_only inertia_lockfile_wins inertia_lockfile_compact inertia_lockfile_reordered inertia_livewire_legacy inertia_wins_over_livewire package_without_inertia usage)
 for c in "${CASES[@]}"; do
   [ -n "$ONLY" ] && [ "$ONLY" != "$c" ] && continue
   echo "== $c"

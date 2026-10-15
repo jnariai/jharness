@@ -96,7 +96,7 @@ Never ask twice, and never ask when `STACK` is `none`. A non-interactive run def
 
 ### 2.5 — Seed stack guidelines (Laravel only)
 
-The harness ships an opinionated convention layer under `guidelines/` inside the plugin directory (`<plugin-root>`, the directory this command file lives two levels under): `laravel.md`, plus `livewire.md` for Livewire projects. When the target is a Laravel repo, their composition is the project's mandatory convention layer and every generated artifact points at it.
+The harness ships an opinionated convention layer under `guidelines/` inside the plugin directory (`<plugin-root>`, the directory this command file lives two levels under): `laravel.md`, plus the frontend layer the project uses — `inertia.md` + `react.md` or `vue.md` for Inertia apps, `livewire.md` for Livewire apps. When the target is a Laravel repo, their composition is the project's mandatory convention layer and every generated artifact points at it.
 
 `scripts/sync-guidelines.sh` detects the stack from `composer.json` and composes the files — never re-implement either here:
 
@@ -104,10 +104,12 @@ The harness ships an opinionated convention layer under `guidelines/` inside the
 "<plugin-root>/scripts/sync-guidelines.sh" --source "<plugin-root>" --check <target>
 ```
 
-| `STACK` record | `composer.json` requires | Composed from |
+| `STACK` record | `composer.json` / `package.json` require | Composed from |
 |---|---|---|
-| `laravel` | `laravel/framework` | `laravel.md` |
-| `laravel-livewire` | `laravel/framework` + `livewire/livewire` | `laravel.md` + `livewire.md` |
+| `laravel` | `laravel/framework` with neither Livewire nor an Inertia adapter, or an Inertia adapter that is not version 2 or 3 (warning on stderr) | `laravel.md` |
+| `laravel-react` | `laravel/framework`, and `package.json` requires `@inertiajs/react` 2 or 3 | `laravel.md` + `inertia.md` + `react.md` |
+| `laravel-vue` | `laravel/framework`, and `package.json` requires `@inertiajs/vue3` 2 or 3 | `laravel.md` + `inertia.md` + `vue.md` |
+| `laravel-livewire` | `laravel/framework` + `livewire/livewire`, no Inertia package | `laravel.md` + `livewire.md` |
 | `none` | neither | — |
 
 `STACK none` → `guidelines.status = none`; skip the rest of this step and generate as usual.
@@ -220,7 +222,7 @@ After the table:
 - **Reality only** — `.spec/`, `.specs/`, `spec/` are never read or cited by any step of this pipeline.
 - **Never invent** — applies transitively; agents cite evidence or emit the N/A shape.
 - **Never clobber hand-written files** without `--adopt`.
-- **Stack guidelines win** — on a Laravel target (with or without Livewire), `docs/agents/coding_guidelines.md` is the harness convention layer: seeded once when absent, never regenerated, never adopted, and cited as mandatory in `AGENTS.md` §2 and `CLAUDE.md`.
+- **Stack guidelines win** — on a Laravel target (React, Vue, Livewire or backend only), `docs/agents/coding_guidelines.md` is the harness convention layer: seeded once when absent, never regenerated, never adopted, and cited as mandatory in `AGENTS.md` §2 and `CLAUDE.md`.
 - **Ask before merging** — the convention layer and the jharness block are never imposed. Step 2.4 asks once per run; `merge = false` skips steps 2.5 and 2.6 entirely.
 - **The stub owns only its block** — `scripts/apply-stub.sh` writes between `<!-- jharness:start -->` and `<!-- jharness:end -->` and nowhere else. A hand-written `AGENTS.md` keeps every line it had.
 - **Preserve foreign marker blocks** — third-party `<tag>...</tag>` regions (e.g. `<laravel-boost-guidelines>`) in owned files are re-appended verbatim on regeneration, never reworded, never seeded; size checks ignore them.
