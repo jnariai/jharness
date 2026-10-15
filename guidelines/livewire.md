@@ -241,16 +241,37 @@ trait HandlesDomainErrors
 ```blade
 {{-- resources/views/components/ui/toast.blade.php, rendered once in the layout --}}
 <div
-    x-data="{ toasts: [] }"
-    x-on:toast.window="toasts.push($event.detail); setTimeout(() => toasts.shift(), 5000)"
-    x-init="@if (session('success')) toasts.push({ type: 'success', message: @js(session('success')) }) @endif"
+    x-data="{
+        toasts: [],
+        add(toast) {
+            toast.id = Date.now() + Math.random();
+            this.toasts.push(toast);
+            if (toast.type !== 'error') setTimeout(() => this.remove(toast.id), 5000);
+        },
+        remove(id) {
+            this.toasts = this.toasts.filter((t) => t.id !== id);
+        },
+    }"
+    x-on:toast.window="add($event.detail)"
+    x-init="@if (session('success')) add({ type: 'success', message: @js(session('success')) }) @endif"
+    role="status"
+    aria-live="polite"
     class="fixed bottom-4 right-4 space-y-2"
 >
-    <template x-for="toast in toasts">
-        <div x-text="toast.message" :class="toast.type === 'error' ? 'bg-red-600' : 'bg-green-600'" class="rounded px-4 py-2 text-white"></div>
+    <template x-for="toast in toasts" :key="toast.id">
+        <div :class="toast.type === 'error' ? 'bg-red-600' : 'bg-green-600'" class="flex items-start gap-3 rounded px-4 py-2 text-white">
+            <span x-text="toast.message"></span>
+            <button type="button" x-on:click="remove(toast.id)" aria-label="{{ __('Dismiss') }}">&times;</button>
+        </div>
     </template>
 </div>
 ```
+
+- **The toast outlet is a live region** — `role="status"` and `aria-live="polite"`
+  on the container, which stays in the layout so it exists before any message
+  arrives. Messages are announced without moving focus.
+- **Success toasts close after 5 seconds; error toasts stay until dismissed.** Every
+  toast has a dismiss button, so nobody has to read an error against a timer.
 
 - **No `try`/`catch` around Actions** in component methods.
 - **Success messages**: a session `success` flash before a redirect, or
@@ -356,5 +377,5 @@ it('forbids publishing someone else\'s post', function () {
 - [ ] Reads through `#[Computed]` + a `Get*` Action injected in `boot()`; filters in `#[Url]`.
 - [ ] No writes, transactions or query chains in components; no `@php` in templates.
 - [ ] UI from `x-ui.*` Blade components; no Flux.
-- [ ] `HandlesDomainErrors` on every component that calls an Action; one toast in the layout.
+- [ ] `HandlesDomainErrors` on every component that calls an Action; one toast in the layout, a polite live region; error toasts stay until dismissed.
 - [ ] Every component action has a Livewire test asserting backend state, validation and authorization; UI on top.

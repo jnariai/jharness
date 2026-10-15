@@ -8,8 +8,8 @@ This block is stripped from the copy.
 <!-- harness-meta:end -->
 
 Stack assumed: the **official React starter kit** — React 19, TypeScript, Inertia 3,
-Tailwind, shadcn/ui, Wayfinder. Every Laravel and Inertia rule still applies; this
-part adds only what is specific to React.
+Tailwind, shadcn/ui, Wayfinder. Every Laravel and Inertia rule still applies,
+including the Inertia version tags; this part adds only what is specific to React.
 
 ---
 
@@ -80,9 +80,10 @@ export default function Index({ invoices, filters }: Props) {
 - **Shared props** come from `usePage().props`, typed once through `InertiaConfig`
   — `auth.can`, `locale` — wrapped in small hooks (`useAbilities()`) rather than
   read raw in every component.
-- **`Page.layout` is an array or a function declaration**
+- **`Page.layout` is an array or a function declaration** (Inertia 3)
   (`Index.layout = [AppLayout]`); an arrow function assigned to `.layout` no longer
-  works in Inertia 3.
+  works in Inertia 3. On Inertia 2 it is the layout component or an arrow function
+  (`Index.layout = (page) => <AppLayout children={page} />`).
 
 ---
 
@@ -140,7 +141,7 @@ export default function Index({ invoices, filters }: Props) {
 ## Flash and toasts
 
 One `FlashToaster` component in the app layout subscribes to the router's `flash`
-event (`router.on('flash', …)` in a `useEffect`, unsubscribing on unmount) and
+event (Inertia 2.3.3+) (`router.on('flash', …)` in a `useEffect`, unsubscribing on unmount) and
 shows `flash.success` / `flash.error` with the kit's toast primitive (sonner).
 Pages never render domain errors themselves.
 

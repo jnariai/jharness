@@ -1782,6 +1782,9 @@ on every change, and `ralph` gates on both.
 }
 ```
 
+A frontend layer may add its own checks to `lint` (Inertia adds `@types:fresh`);
+they then run wherever `lint` runs.
+
 Larastan level 6 does not check generics, so the arch preset and review carry the
 typing rules it misses.
 

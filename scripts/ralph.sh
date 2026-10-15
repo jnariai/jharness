@@ -92,6 +92,11 @@
 # puts Pint, Larastan, Rector and scripts/grep-gates.sh behind `composer lint`.
 # --test-cmd and RALPH_TEST_CMD are taken verbatim — no lint is added.
 #
+# Detection runs again before every session prompt and every gate 2 (fix
+# cycles included): a phase that installs `composer lint`, Sail or the project
+# itself is judged by the new command in the same cycle. Overrides are fixed
+# for the whole run.
+#
 # Laravel Sail: the suite runs inside the container, so Sail takes precedence
 # over `composer test`. Containers down -> abort in preflight (every gate 2
 # would fail, burning fix cycles).
@@ -165,6 +170,8 @@ LIMIT_WAIT_DEFAULT="${RALPH_LIMIT_WAIT_DEFAULT:-1800}"
 LIMIT_BUFFER="${RALPH_LIMIT_BUFFER:-60}"
 
 TEST_CMD=""
+# override (--test-cmd / RALPH_TEST_CMD, fixed for the run) | detected (re-detected before every gate 2)
+TEST_ORIGIN=""
 SAIL_BIN=""
 LIMIT_WAITS=0
 # Current phase file: the stream watcher uses the task titles to match a file
@@ -346,25 +353,9 @@ check_test_cmd_runnable() {
   exit 1
 }
 
-resolve_test_cmd() {
-  SAIL_BIN="$(detect_sail || true)"
-
-  if [ -n "$TEST_CMD_FLAG" ]; then
-    TEST_CMD="$TEST_CMD_FLAG"
-    log "Gate 2 — test command (--test-cmd): $TEST_CMD"
-    check_sail_running
-    check_test_cmd_runnable "--test-cmd"
-    return 0
-  fi
-
-  if [ -n "${RALPH_TEST_CMD:-}" ]; then
-    TEST_CMD="$RALPH_TEST_CMD"
-    log "Gate 2 — test command (RALPH_TEST_CMD): $TEST_CMD"
-    check_sail_running
-    check_test_cmd_runnable "RALPH_TEST_CMD"
-    return 0
-  fi
-
+# detect_test_cmd — the manifest-detected test command (empty when nothing
+# resolves). Reads SAIL_BIN; prints, sets nothing.
+detect_test_cmd() {
   # Sail comes BEFORE composer/npm: in a dockerized Laravel project the host
   # has neither PHP nor database access, and `composer test` would lie as a gate.
   local lint=""
@@ -373,20 +364,63 @@ resolve_test_cmd() {
   fi
 
   if [ -n "$SAIL_BIN" ]; then
-    TEST_CMD="${lint:+$SAIL_BIN $lint}$SAIL_BIN test"
+    echo "${lint:+$SAIL_BIN $lint}$SAIL_BIN test"
   elif [ -f composer.json ] && grep -qE '"test"[[:space:]]*:' composer.json; then
-    TEST_CMD="${lint}composer test"
+    echo "${lint}composer test"
   elif [ -f artisan ]; then
-    TEST_CMD="${lint}php artisan test"
+    echo "${lint}php artisan test"
   elif [ -f package.json ] && grep -qE '"test"[[:space:]]*:' package.json; then
-    TEST_CMD="npm test"
+    echo "npm test"
   elif [ -f pytest.ini ] || { [ -f pyproject.toml ] && grep -qF '[tool.pytest' pyproject.toml; }; then
-    TEST_CMD="pytest"
+    echo "pytest"
   elif [ -f go.mod ]; then
-    TEST_CMD="go test ./..."
+    echo "go test ./..."
   elif [ -f Cargo.toml ]; then
-    TEST_CMD="cargo test"
+    echo "cargo test"
   fi
+}
+
+# refresh_test_cmd — re-detect a detected command; the phase may have added
+# `composer lint`, Sail or the project itself. Overrides are never touched.
+# No abort mid-run: a command that cannot run fails gate 2 with its output.
+refresh_test_cmd() {
+  [ "$TEST_ORIGIN" = detected ] || return 0
+  SAIL_BIN="$(detect_sail || true)"
+  local cmd
+  cmd="$(detect_test_cmd)"
+  [ "$cmd" = "$TEST_CMD" ] && return 0
+  TEST_CMD="$cmd"
+  state_meta test_cmd "${TEST_CMD:-—}"
+  if [ -n "$TEST_CMD" ]; then
+    log "Gate 2 — test command changed (detected): $TEST_CMD"
+  else
+    warn "Gate 2 DISABLED: the test command no longer resolves."
+  fi
+}
+
+resolve_test_cmd() {
+  SAIL_BIN="$(detect_sail || true)"
+
+  if [ -n "$TEST_CMD_FLAG" ]; then
+    TEST_ORIGIN=override
+    TEST_CMD="$TEST_CMD_FLAG"
+    log "Gate 2 — test command (--test-cmd): $TEST_CMD"
+    check_sail_running
+    check_test_cmd_runnable "--test-cmd"
+    return 0
+  fi
+
+  if [ -n "${RALPH_TEST_CMD:-}" ]; then
+    TEST_ORIGIN=override
+    TEST_CMD="$RALPH_TEST_CMD"
+    log "Gate 2 — test command (RALPH_TEST_CMD): $TEST_CMD"
+    check_sail_running
+    check_test_cmd_runnable "RALPH_TEST_CMD"
+    return 0
+  fi
+
+  TEST_ORIGIN=detected
+  TEST_CMD="$(detect_test_cmd)"
 
   if [ -n "$TEST_CMD" ]; then
     log "Gate 2 — test command (detected): $TEST_CMD"
@@ -1629,6 +1663,8 @@ run_phase() {
     local prompt_file log_file rc=0 sig_before
     log_file="$LOG_DIR/${phase_file%.md}.cycle-${cycle}.log"
 
+    # Outside the $(...) below: the refresh must reach this shell.
+    refresh_test_cmd
     if [ "$cycle" -eq 1 ]; then
       prompt_file=$(build_impl_prompt "$phase_file" "$cycle")
     else
@@ -1668,6 +1704,7 @@ run_phase() {
       if [ "$session_wrote" -eq 1 ]; then state_gate "$phase_num" 1 pass
       else state_gate "$phase_num" 1 skip; fi
 
+      refresh_test_cmd
       if [ -n "$TEST_CMD" ]; then state_gate "$phase_num" 2 run; else state_gate "$phase_num" 2 skip; fi
 
       if ! gate2_tests_pass "$LOG_DIR/${phase_file%.md}.test-${cycle}.log"; then

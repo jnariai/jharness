@@ -254,6 +254,53 @@ case_package_without_inertia() {
   assert_eq laravel-livewire "$(field STACK "$TMP/o")" "package.json sem inertia -> livewire"
 }
 
+case_inertia_v3() {
+  local p; p=$(make_inertia_project reactv3 "$INERTIA" '"@inertiajs/react": "^3.0"')
+  run "$TMP/o" --check "$p"
+  assert_eq laravel-react "$(field STACK "$TMP/o")" "@inertiajs/react ^3.0 -> laravel-react"
+}
+
+case_inertia_v1_laravel_only() {
+  local p; p=$(make_inertia_project reactv1 "$INERTIA" '"@inertiajs/react": "^1.0"')
+  run "$TMP/o" "$p"
+  assert_eq laravel "$(field STACK "$TMP/o")" "@inertiajs/react ^1.0 -> laravel"
+  assert_same_file "$EXP/laravel_v2" "$p/docs/agents/coding_guidelines.md" "Inertia 1 -> so laravel.md"
+  grep -q "not supported by the Inertia layer" "$TMP/o.err" && ok "aviso no stderr" || bad "sem aviso no stderr"
+}
+
+case_inertia_unreadable_laravel_only() {
+  local p; p=$(make_inertia_project vuestar "$INERTIA" '"@inertiajs/vue3": "latest"')
+  run "$TMP/o" --check "$p"
+  assert_eq laravel "$(field STACK "$TMP/o")" "@inertiajs/vue3 latest -> laravel"
+  grep -q "version unreadable" "$TMP/o.err" && ok "aviso de versao ilegivel" || bad "sem aviso de versao ilegivel"
+}
+
+case_inertia_lockfile_wins() {
+  # Constraint ilegivel no package.json, versao instalada no package-lock.json.
+  local p; p=$(make_inertia_project vuelock "$INERTIA" '"@inertiajs/vue3": "latest"')
+  printf '{"packages": {\n    "node_modules/@inertiajs/vue3": {\n      "version": "2.3.1"\n    }\n}}\n' > "$p/package-lock.json"
+  run "$TMP/o" --check "$p"
+  assert_eq laravel-vue "$(field STACK "$TMP/o")" "package-lock.json 2.3.1 -> laravel-vue"
+}
+
+case_inertia_livewire_legacy() {
+  # Projeto com Livewire + Inertia era composto como Livewire antes do Inertia vencer.
+  local v p both='"laravel/framework": "^13.0", "livewire/livewire": "^4.0", "inertiajs/inertia-laravel": "^2.0"'
+  for v in composed_v1 legacy_v2; do
+    p=$(make_project_with "lwreact_$v" "$both" "$EXP/$v")
+    printf '{"dependencies": {%s}}\n' "$REACT" > "$p/package.json"
+    run "$TMP/o" --check "$p"
+    assert_eq outdated "$(field GUIDELINES "$TMP/o")" "copia livewire intacta ($v) num projeto react+livewire -> outdated"
+    run "$TMP/o" "$p"
+    assert_same_file "$EXP/react_v1" "$p/docs/agents/coding_guidelines.md" "reescrita com a composicao react ($v)"
+  done
+  printf '# mine\n\nhand-written rule\n' > "$TMP/mine"
+  p=$(make_project_with lwvue_mod "$both" "$TMP/mine")
+  printf '{"dependencies": {%s}}\n' "$VUE" > "$p/package.json"
+  run "$TMP/o" --check "$p"
+  assert_eq modified "$(field GUIDELINES "$TMP/o")" "edicao manual num projeto vue+livewire -> modified"
+}
+
 case_usage() {
   "$SYNC" > /dev/null 2>&1
   assert_eq 2 "$?" "sem --source -> exit 2"
@@ -265,7 +312,7 @@ case_usage() {
 
 make_upstream
 
-CASES=(non_laravel laravel_only laravel_outdated seed outdated_legacy outdated_split modified non_git_source print_upstream react_seed vue_seed react_outdated_laravel_only inertia_wins_over_livewire package_without_inertia usage)
+CASES=(non_laravel laravel_only laravel_outdated seed outdated_legacy outdated_split modified non_git_source print_upstream react_seed vue_seed react_outdated_laravel_only inertia_v3 inertia_v1_laravel_only inertia_unreadable_laravel_only inertia_lockfile_wins inertia_livewire_legacy inertia_wins_over_livewire package_without_inertia usage)
 for c in "${CASES[@]}"; do
   [ -n "$ONLY" ] && [ "$ONLY" != "$c" ] && continue
   echo "== $c"

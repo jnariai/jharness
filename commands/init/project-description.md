@@ -158,7 +158,7 @@ grep -Fq '## Overview' "$F"
 grep -Fq '### Key Concepts' "$F"
 grep -Fq '## Tech Stack' "$F"
 grep -Eq '^\| Backend \| Laravel ' "$F"                                    # Laravel-first
-grep -Eq '^\| Frontend \| (Inertia 3 \+ (React|Vue)|Livewire)' "$F"
+grep -Eq '^\| Frontend \| (Inertia [0-9]+(\.[0-9]+)* \+ (React|Vue)|Livewire)' "$F"
 grep -Fq '## Bounded Contexts' "$F"
 grep -Eq '^\| Identity \|' "$F"
 grep -Fq '## Abilities' "$F"

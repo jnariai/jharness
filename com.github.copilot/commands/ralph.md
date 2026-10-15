@@ -30,7 +30,7 @@ $ARGUMENTS
 | `--engine claude\|codex` | implementation engine (default here: `claude`) |
 | `--from N` | start at phase N (clears progress for phases >= N) |
 | `--max-cycles N` | fix cycles per phase (default 3) |
-| `--test-cmd "<cmd>"` | gate 2 test command, used verbatim (detection adds `composer lint &&` when a `lint` script exists; an explicit command does not) |
+| `--test-cmd "<cmd>"` | gate 2 test command, used verbatim (detection adds `composer lint &&` when a `lint` script exists and re-detects before every gate 2; an explicit command does neither) |
 | `--keep-going` | continue after a phase fails |
 | `--no-verify` | turn gate 3 off |
 | `--dashboard` | live panel in the terminal (foreground only) |

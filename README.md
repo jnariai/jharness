@@ -231,6 +231,8 @@ Laravel Sail projects: the suite runs **inside the container** (`vendor/bin/sail
 
 Lint: when the command is detected for a Laravel project and `composer.json` defines a `lint` script, gate 2 runs it first — `composer lint && composer test`, or both through Sail. The convention layer puts Pint, Larastan, Rector and `scripts/grep-gates.sh` behind `composer lint`. `--test-cmd` and `RALPH_TEST_CMD` are used verbatim.
 
+A detected command is detected again before every session and every gate 2, fix cycles included: a phase that installs `composer lint`, Sail or the project itself is judged by the new command in that same cycle. `--test-cmd` and `RALPH_TEST_CMD` stay fixed for the whole run.
+
 ### Options and variables
 
 | Option | Effect |

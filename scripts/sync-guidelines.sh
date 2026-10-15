@@ -9,13 +9,17 @@
 #   laravel-react     laravel.md + inertia.md + react.md  (package.json: @inertiajs/react)
 #   laravel-vue       laravel.md + inertia.md + vue.md    (package.json: @inertiajs/vue3)
 #   laravel-livewire  laravel.md + livewire.md            (composer.json: livewire/livewire)
-# Inertia wins over Livewire when a project somehow requires both.
+# Inertia wins over Livewire when a project somehow requires both. The Inertia
+# layers cover Inertia 2 and 3 only: any other adapter version (1, or one that
+# cannot be read) composes laravel.md alone, with a warning on stderr.
 #
 # The source is normally a fresh clone of the harness from GitHub (see
 # commands/update.md). When the source is a git repository, every past revision
 # of the guidelines is known — including the old single-file
 # guidelines/laravel-livewire.md layout, and the laravel.md-only composition an
-# Inertia project received before inertia.md existed — so a local copy that
+# Inertia project received before inertia.md existed, and the Livewire layouts
+# a project requiring both Livewire and Inertia received before Inertia took
+# precedence — so a local copy that
 # byte-matches ANY of them is provably unedited and safe to refresh. A copy that matches none was
 # edited by hand and is never overwritten without --force.
 #
@@ -69,11 +73,38 @@ strip() {
   awk '/^<!-- harness-meta:start -->$/{skip=1;next} /^<!-- harness-meta:end -->$/{skip=0;drop=1;next} skip{next} drop&&/^$/{drop=0;next} {drop=0;print}' "$@"
 }
 
+# inertia_major <package> — the adapter's major version: the installed one from
+# package-lock.json when present, else the first number of the package.json
+# constraint (^2.3.0 -> 2, ~3.1 -> 3, 3.x -> 3). Empty when it cannot be read.
+inertia_major() {
+  local pkg="$1" lock="$TARGET/package-lock.json" v=""
+  if [ -f "$lock" ]; then
+    v=$(grep -A3 "\"node_modules/$pkg\": {" "$lock" | grep -m1 -oE '"version": *"[^"]*"' | sed 's/.*"\([^"]*\)"$/\1/')
+  fi
+  if [ -z "$v" ]; then
+    v=$(grep -m1 -oE "\"$pkg\": *\"[^\"]*\"" "$TARGET/package.json" | sed 's/.*: *"\([^"]*\)"$/\1/')
+  fi
+  grep -m1 -oE '^[^0-9]*[0-9]+' <<< "$v" | grep -oE '[0-9]+$'
+}
+
+# inertia_stack <stack> <package> — the stack when the adapter is Inertia 2 or 3,
+# else laravel (laravel.md alone) and a warning.
+inertia_stack() {
+  local major; major=$(inertia_major "$2")
+  case "$major" in
+    2|3) echo "$1" ;;
+    *)
+      echo "sync-guidelines: $2 ${major:-version unreadable} is not supported by the Inertia layer (2 or 3) — composing laravel.md only" >&2
+      echo laravel
+      ;;
+  esac
+}
+
 detect_stack() {
   local c="$TARGET/composer.json" p="$TARGET/package.json"
   if [ -f "$c" ] && grep -q '"laravel/framework"' "$c"; then
-    if [ -f "$p" ] && grep -q '"@inertiajs/react"' "$p"; then echo laravel-react
-    elif [ -f "$p" ] && grep -q '"@inertiajs/vue3"' "$p"; then echo laravel-vue
+    if [ -f "$p" ] && grep -q '"@inertiajs/react"' "$p"; then inertia_stack laravel-react @inertiajs/react
+    elif [ -f "$p" ] && grep -q '"@inertiajs/vue3"' "$p"; then inertia_stack laravel-vue @inertiajs/vue3
     elif grep -q '"livewire/livewire"' "$c"; then echo laravel-livewire
     else echo laravel
     fi
@@ -103,6 +134,14 @@ case "$STACK" in
     ALTS=("guidelines/laravel-livewire.md")
     ;;
 esac
+
+# A project that also requires Livewire was composed as a Livewire project
+# before Inertia took precedence (or before the Inertia version gate): those
+# copies are unedited too.
+if [ "$STACK" != laravel-livewire ] && [ "$STACK" != none ] \
+  && grep -q '"livewire/livewire"' "$TARGET/composer.json" 2>/dev/null; then
+  ALTS+=("guidelines/laravel.md guidelines/livewire.md" "guidelines/laravel-livewire.md")
+fi
 
 # compose — the stack's files from the source working tree
 compose() {

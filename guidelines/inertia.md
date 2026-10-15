@@ -19,6 +19,37 @@ React or Vue layer that follows adds what is specific to the framework.
 
 ---
 
+## Inertia version
+
+The project's installed version decides, never this file: `inertiajs/inertia-laravel`
+in `composer.lock` and `@inertiajs/react` / `@inertiajs/vue3` in the npm lockfile.
+Never upgrade Inertia just to follow a rule here.
+On any version other than 2 or 3 this layer and the React/Vue layer do not apply;
+`/jharness:update` and `/ai-context` compose `laravel.md` alone.
+
+- **Untagged rules hold for Inertia 2 and 3.**
+- **`(Inertia 3)`** marks an API that does not exist in Inertia 2. On Inertia 2 it
+  is never used; the table below says what takes its place.
+- **`(Inertia 2.x+)`** marks an API added in an Inertia 2 minor. On an older 2.x it
+  is not used either: below 2.3.3 there is no Inertia flash, so successes and domain
+  errors use the Laravel layer's session flash, shared from `HandleInertiaRequests`.
+
+| Inertia 3 | On Inertia 2 |
+|---|---|
+| `defer` / `optional` / `merge` inside closures and nested arrays; dot notation in `only`, `except`, `<Deferred>`, `<WhenVisible>` | top-level props only |
+| `reloading` slot prop on `<Deferred>`, `preserveErrors` on reloads | not available |
+| `<Link instant>`, `<Form instant>` | plain `<Link>` / `<Form>` |
+| `optimistic` on `<Form>` | plain `<Form>`; the page waits for the server |
+| `useHttp`, `http.onRequest` / `onResponse` / `onError` interceptors, no Axios | Axios, which Inertia 2 ships with, and its interceptors |
+| `router.cancelAll()` | `router.cancel()` |
+| `httpException` / `networkError` events, `onHttpException` / `onNetworkError` | `invalid` / `exception` events |
+| `Inertia::handleExceptionsUsing()` error pages with shared data | `$exceptions->respond()` in `bootstrap/app.php` rendering the error page with `Inertia::render()` |
+| default layout in `createInertiaApp({ layout })`, layout props (`layoutProps`, `setLayoutProps`) | per-page layouts; the layout reads shared props |
+| `<Form>` generic, `createForm<T>()` in Vue | `useForm<T>()` when the form needs typed errors |
+| `@inertiajs/vite`, SSR inside `npm run dev` | `php artisan inertia:start-ssr` in development too |
+
+---
+
 ## Golden rules
 
 1. **The server is the store.** Props are the truth; the page renders them and
@@ -45,12 +76,12 @@ React or Vue layer that follows adds what is specific to the framework.
 
 | Layer | Path | Owns | Never |
 |---|---|---|---|
-| Controller | `app/Http/Controllers/<Context>/` | authorize, validate, call one Action, map the result to View DTOs, `Inertia::render()` or redirect with `Inertia::flash()` | queries, rules, models as props |
+| Controller | `app/Http/Controllers/<Context>/` | authorize, validate, call one Action, map the result to View DTOs, `Inertia::render()` or redirect with `Inertia::flash()` (Inertia 2.3.3+) | queries, rules, models as props |
 | View DTO | `app/Data/<Context>/*View.php` | the exact shape one page or component receives, `fromModel()` | rules, queries, behavior, integer ids |
 | Shared props | `app/Http/Middleware/HandleInertiaRequests.php` | `auth.user`, `auth.can` (global abilities), locale | per-page data, flash, queries beyond the current user |
-| Error pages | `AppServiceProvider::boot()` → `Inertia::handleExceptionsUsing()` | rendering 403/404/500/503 as an Inertia page with shared data | domain errors (those are flash) |
+| Error pages | `AppServiceProvider::boot()` → `Inertia::handleExceptionsUsing()` (Inertia 3) | rendering 403/404/500/503 as an Inertia page with shared data | domain errors (those are flash) |
 | Generated types | `resources/js/types/generated.d.ts` | TS mirror of View DTOs, enums, VOs | hand edits |
-| Hand types | `resources/js/types/global.d.ts`, `resources/js/types/index.d.ts` | the `InertiaConfig` augmentation (shared props, flash, layout props), `Paginated<T>`, framework glue | shapes of server data |
+| Hand types | `resources/js/types/global.d.ts`, `resources/js/types/index.d.ts` | the `InertiaConfig` augmentation (shared props, flash, layout props — Inertia 3), `Paginated<T>`, framework glue | shapes of server data |
 | Page | `resources/js/pages/<context>/<resource>/<page>` | composing components, forms posting intents, layout props | fetching data, business rules, permissions logic |
 | Layout | `resources/js/layouts/` | shell, navigation, toast outlet | page data |
 | Component | `resources/js/components/<context>/`, `components/ui/` | presentation, local UI state | server calls other than through Inertia, rules |
@@ -77,7 +108,7 @@ class InvoiceController
                 ->handle(GetOverdueInvoicesFilter::fromRequest($request))
                 ->through(fn (Invoice $invoice) => InvoiceRowView::fromModel(
                     $invoice,
-                    new InvoiceAbilities(
+                    new InvoiceAbilitiesView(
                         refund: $user->can('refund', $invoice),
                         void: $user->can('void', $invoice),
                     ),
@@ -99,18 +130,18 @@ class InvoiceController
 - **Mapping to View DTOs happens in the controller** — it is presentation. The
   Action returns models; the controller decides what the page sees.
 - **Writes end in a redirect** — `to_route()` or `back()` — with an
-  `Inertia::flash()` when the user should be told. Never `Inertia::render()` after
+  `Inertia::flash()` (Inertia 2.3.3+) when the user should be told. Never `Inertia::render()` after
   a `POST`.
 
 ### Choosing a prop type
 
 Every prop is eager unless one of these fits. `optional`, `defer` and `merge` also
 work inside closures and nested arrays, and `only`, `except`, `<Deferred>` and
-`<WhenVisible>` target nested props with dot notation.
+`<WhenVisible>` target nested props with dot notation (Inertia 3).
 
 | Prop | Use when | Client side |
 |---|---|---|
-| `Inertia::defer(fn)` | the page can paint without it and it is slow (totals, charts) | `<Deferred data="totals">` with a skeleton fallback; `reloading` slot prop while it refreshes |
+| `Inertia::defer(fn)` | the page can paint without it and it is slow (totals, charts) | `<Deferred data="totals">` with a skeleton fallback; `reloading` slot prop while it refreshes (Inertia 3) |
 | `Inertia::optional(fn)` | only some interactions need it (a dialog's data) | `router.reload({ only: ['…'] })` when the interaction opens |
 | `Inertia::once(fn)` | reference data that rarely changes (option lists, plans) | remembered while navigating between pages that include it; `->as()` shares it between pages, `->until()` expires it, `->fresh()` forces it |
 | `Inertia::scroll(fn)` | a paginated feed or long list loaded on scroll | `<InfiniteScroll data="invoices">`; a filter change visits with `reset: ['invoices']` |
@@ -147,10 +178,10 @@ final readonly class InvoiceRowView
         public string $statusLabel,
         public string $customerName,
         public string $issuedAt,
-        public InvoiceAbilities $can,
+        public InvoiceAbilitiesView $can,
     ) {}
 
-    public static function fromModel(Invoice $invoice, InvoiceAbilities $can): self
+    public static function fromModel(Invoice $invoice, InvoiceAbilitiesView $can): self
     {
         return new self(
             id: $invoice->public_id,
@@ -166,7 +197,7 @@ final readonly class InvoiceRowView
 }
 
 #[TypeScript]
-final readonly class InvoiceAbilities
+final readonly class InvoiceAbilitiesView
 {
     public function __construct(
         public bool $refund,
@@ -184,7 +215,7 @@ Rules:
 - **Labels are server-side.** An enum crosses as its value *and* its translated
   label (`status` + `statusLabel`). Select options cross as `OptionView` lists built
   from the enum — filtered by whatever rule decides which cases are pickable.
-- **Record abilities are a `can` field**, an `*Abilities` DTO of booleans computed
+- **Record abilities are a `can` field**, an `*AbilitiesView` DTO of booleans computed
   by the controller from the policy. The page reads `invoice.can.refund`; it never
   derives it.
 - **Dates cross as ISO-8601 strings**; money crosses as the `Money` VO's public
@@ -205,17 +236,41 @@ from every class and enum marked `#[TypeScript]`.
 
 - **Run the transformer after any change** to a View DTO, an exposed enum or VO,
   and commit the generated file with the PHP change.
-- **The gate regenerates and diffs**: `php artisan typescript:transform` followed by
-  `git diff --exit-code resources/js/types/generated.d.ts`. A stale file fails the
-  change.
+- **The gate regenerates and compares** — `composer types:fresh`, part of
+  `composer lint`, runs `scripts/types-fresh.sh`:
+
+  ```bash
+  #!/usr/bin/env bash
+  # Fails when generated.d.ts was stale. The file is regenerated either way,
+  # so after a failure it only needs committing.
+  set -u
+  f=resources/js/types/generated.d.ts
+  before=$(cat "$f" 2>/dev/null)
+  php artisan typescript:transform || exit 1
+  if [ "$before" != "$(cat "$f")" ]; then
+      echo "types-fresh: $f was stale; it is regenerated now, commit it" >&2
+      exit 1
+  fi
+  ```
+
+  It compares the file before and after regenerating, never against git: a freshly
+  regenerated file that is not committed yet is valid, and `git diff --exit-code`
+  would fail it.
+- **Inertia projects extend `composer lint`** with the check, from the phase that
+  installs the transformer on:
+
+  ```json
+  "types:fresh": "bash scripts/types-fresh.sh",
+  "lint": ["pint --test", "phpstan analyse", "rector --dry-run", "bash scripts/grep-gates.sh", "@types:fresh"]
+  ```
 - **Never edit `generated.d.ts`** and never re-declare a server shape by hand.
 - Pages import their prop types from the generated namespace:
   `App.Data.Billing.InvoiceRowView`, `App.Enums.InvoiceStatus`.
 - **Shared props, flash and layout props are typed once**, by augmenting
-  `InertiaConfig` in `global.d.ts` (`sharedPageProps`, `flashDataType`,
-  `layoutProps`) with generated types — never by passing a `SharedData` generic to
+  `InertiaConfig` in `global.d.ts` (`sharedPageProps`, `flashDataType` (Inertia 2.3.3+),
+  `layoutProps` (Inertia 3)) with generated types — never by passing a `SharedData` generic to
   every `usePage()`. The `App.Data.*` names below follow wherever `UserView` and
-  `GlobalAbilities` live in the project:
+  `GlobalAbilitiesView` live in the project:
 
   ```ts
   // resources/js/types/global.d.ts
@@ -226,7 +281,7 @@ from every class and enum marked `#[TypeScript]`.
           sharedPageProps: {
               auth: {
                   user: App.Data.UserView;
-                  can: App.Data.GlobalAbilities;
+                  can: App.Data.GlobalAbilitiesView;
               } | null;
               locale: string;
           };
@@ -263,11 +318,11 @@ public function share(Request $request): array
     ];
 }
 
-private function abilities(User $user): GlobalAbilities
+private function abilities(User $user): GlobalAbilitiesView
 {
     $gate = Gate::forUser($user);
 
-    return new GlobalAbilities(
+    return new GlobalAbilitiesView(
         viewBilling: $gate->allows('viewBilling'),
         manageUsers: $gate->allows('manageUsers'),
         exportReports: $gate->allows('exportReports'),
@@ -275,7 +330,7 @@ private function abilities(User $user): GlobalAbilities
 }
 ```
 
-- **`auth.can` is the global ability map** — a `GlobalAbilities` View DTO with one
+- **`auth.can` is the global ability map** — a `GlobalAbilitiesView` DTO with one
   boolean per `Gate::define()` ability. Navigation and section-level UI read it.
 - **Abilities, never roles.** The page never receives or compares a role.
 - **Record abilities never go here** — they ride on the record's View DTO.
@@ -295,7 +350,7 @@ private function abilities(User $user): GlobalAbilities
 
 Wayfinder generates typed functions for every controller and named route, with form
 variants enabled and `generate.inertia.component` on in `config/wayfinder.php` (so
-routes know their page component, for instant visits).
+routes know their page component, for instant visits (Inertia 3)).
 
 - **Every URL in the frontend comes from Wayfinder** —
   `@/actions/App/Http/Controllers/Billing/InvoiceController` for controller
@@ -306,7 +361,7 @@ routes know their page component, for instant visits).
   then `store.form(post.id)`. Every controller method is a resource method, so every
   import is one (`store`, `update`, `destroy`); alias it when a page imports
   several (`import { store as publishPost } …`).
-- **Wayfinder results pass straight to Inertia** — `<Form>`'s `action`,
+- **Wayfinder results pass straight to Inertia** (Inertia 2.1.2+) — `<Form>`'s `action`,
   `useForm(store(), …)`, `form.submit(update(invoice.id))`, `<Link href={show(id)}>`;
   the method and URL are inferred.
 - **Route parameters are public ids** — the View DTO's `id`.
@@ -318,16 +373,17 @@ routes know their page component, for instant visits).
 
 - **`<Link>` for navigation**, `prefetch` on links the user is likely to follow
   (main navigation, the row's primary link).
-- **Instant visits are opt-in per link** — `<Link href={show(id)} instant>` swaps
+- **Instant visits are opt-in per link** (Inertia 3) — `<Link href={show(id)} instant>` swaps
   to the target page before the server answers (`<Form instant>` too). Use them only
   for a target page that can render without its page-specific props, which are
   `undefined` until the response arrives; shared props carry over on their own.
 - **Filters, search and pagination live in the query string** — `router.get()`
   with `preserveState` and `preserveScroll`, read back from the filter View DTO.
 - **Partial reloads name what they need** — `router.reload({ only: ['invoices'] })`;
-  add `preserveErrors: true` when a reload must not wipe the form's validation
-  errors.
-- **Never `router.cancel()`** — it is `router.cancelAll()`.
+  add `preserveErrors: true` (Inertia 3) when a reload must not wipe the form's
+  validation errors.
+- **Never `router.cancel()`** — it is `router.cancelAll()` (Inertia 3; on Inertia 2
+  `router.cancel()` is the API).
 
 ---
 
@@ -338,21 +394,21 @@ routes know their page component, for instant visits).
   the FormRequest into the slot's `errors` and render inline next to their field.
   `disableWhileProcessing`, `resetOnSuccess` and `options` (`preserveScroll`,
   `only`, …) cover the usual tweaks without leaving `<Form>`.
-- **Optimistic updates live on the `<Form>` too** — the `optimistic` prop for
+- **Optimistic updates live on the `<Form>` too** (Inertia 3) — the `optimistic` prop for
   toggles and list appends the user should see at once (mark done, like, add a
   row). The callback mirrors what the server will return, from the current props
   and the form data; Inertia rolls back on any failure. Never optimistic for money,
   stock, or anything a rule may refuse.
 - **`useForm` only when the page holds real client state** before submitting:
   multi-step wizards, dynamic rows, a draft the user edits for a while.
-- **Field components read the parent form with `useFormContext()`** instead of
+- **Field components read the parent form with `useFormContext()`** (Inertia 2.3.9+) instead of
   receiving `errors` and `processing` as props.
 - **Field names match the FormRequest keys** (`snake_case`), so `errors.credit_limit_cents`
   maps 1:1. Type the form with the `<Form>` generic (`createForm<T>()` in Vue) when
-  the slot reads `errors` by key.
+  the slot reads `errors` by key (Inertia 3).
 - **No client-side validation of rules.** HTML attributes for UX (`required`,
   `maxlength`, `type="email"`) are fine; the FormRequest is the check.
-- **Live validation is Precognition, built into `<Form>` and `useForm`** — opt-in
+- **Live validation is Precognition, built into `<Form>` and `useForm`** (Inertia 2.3+) — opt-in
   for long forms: `HandlePrecognitiveRequests` on the route, `validate('field')`
   from the form. The FormRequest still runs every rule; no `laravel-precognition`
   package.
@@ -362,6 +418,9 @@ routes know their page component, for instant visits).
 ---
 
 ## HTTP outside the page
+
+This section is Inertia 3. On Inertia 2 the same rules hold with Axios in place of
+`useHttp` and Axios interceptors in place of `http.*`.
 
 - **`useHttp` only for requests that are not page data** — a third-party endpoint,
   an upload straight to a presigned URL, the app's own public `/v1` API when the
@@ -378,7 +437,7 @@ routes know their page component, for instant visits).
 
 - **Validation errors** come from the FormRequest and render inline on the form.
 - **The `with('success'|'error')` flashes of the Laravel layer are written
-  `Inertia::flash()` in an Inertia app**, including in the domain-exception
+  `Inertia::flash()` in an Inertia app** (Inertia 2.3.3+), including in the domain-exception
   handler:
 
   ```php
@@ -394,7 +453,7 @@ routes know their page component, for instant visits).
   (`router.on('flash', …)`, removed on unmount with the callback `router.on`
   returns) and shows each message. Pages never render their own error banners for domain
   errors.
-- **HTTP errors render as an Inertia error page** through one handler:
+- **HTTP errors render as an Inertia error page** through one handler (Inertia 3):
 
   ```php
   // app/Providers/AppServiceProvider.php
@@ -410,19 +469,19 @@ routes know their page component, for instant visits).
   `withSharedData()` gives the error page the shared props (a 404 never reaches
   the middleware otherwise). Returning `null` falls through to Laravel's default
   rendering.
-- **Client error hooks use the v3 names** — `httpException` / `onHttpException`
-  and `networkError` / `onNetworkError`. A listener on `invalid` or `exception`
-  never fires.
+- **Client error hooks use the v3 names** (Inertia 3) — `httpException` /
+  `onHttpException` and `networkError` / `onNetworkError`. On Inertia 3 a listener
+  on `invalid` or `exception` never fires; on Inertia 2 those are the names.
 - Unexpected errors are never swallowed.
 
 ---
 
 ## Layouts
 
-- **The default layout is set once** in `createInertiaApp({ layout })`; the callback
+- **The default layout is set once** (Inertia 3) in `createInertiaApp({ layout })`; the callback
   receives the page name and returns `null` for pages that must not get it. A
   per-page layout always takes precedence.
-- **Pages send data to the layout through layout props** — static
+- **Pages send data to the layout through layout props** (Inertia 3) — static
   (`[AppLayout, { breadcrumbs }]`, or a callback reading page props) or dynamic
   (`setLayoutProps({ … })`) — typed by `layoutProps` in `global.d.ts`. Never a
   wrapper component re-declared per page just to pass a title.
@@ -503,7 +562,7 @@ resources/js/
       $this->actingAs($user)
           ->post(route('invoices.refund', $invoice))
           ->assertRedirect()
-          ->assertInertiaFlash('success', __('Invoice refunded.'));
+          ->assertInertiaFlash('success', __('Invoice refunded.')); // Inertia 2.3.3+
 
       expect($invoice->fresh()->status)->toBe(InvoiceStatus::Refunded);
   });
@@ -531,11 +590,11 @@ The kit's scripts are gates alongside the PHP ones:
 | types | `npm run types` (`tsc --noEmit` / `vue-tsc --noEmit`) |
 | lint | `npm run lint` (ESLint) |
 | format | `npm run format:check` (Prettier) |
-| generated types fresh | `php artisan typescript:transform && git diff --exit-code resources/js/types/generated.d.ts` |
+| generated types fresh | `composer types:fresh` (part of `composer lint`) |
 | build | `npm run build` |
 
-SSR, when the project uses it with the `@inertiajs/vite` plugin, runs inside
-`npm run dev`; `vite build --ssr` and `php artisan inertia:start-ssr` are for
+SSR, when the project uses it with the `@inertiajs/vite` plugin (Inertia 3), runs
+inside `npm run dev`; `vite build --ssr` and `php artisan inertia:start-ssr` are for
 production only.
 
 ---
@@ -560,14 +619,14 @@ production only.
 | re-sending static option lists on every visit | `Inertia::once()` |
 | a Redux, Zustand or Pinia store | props + local UI state |
 | client-side business validation | FormRequest errors, Precognition for live feedback |
-| `useForm` + manual state juggling for an optimistic toggle | `<Form optimistic={…}>` |
+| `useForm` + manual state juggling for an optimistic toggle | `<Form optimistic={…}>` (Inertia 3) |
 | optimistic UI on money, stock or a refusable rule | wait for the server |
 | `Inertia::render()` after a `POST` | redirect with `Inertia::flash()` |
 | `back()->with('success', …)` / a `flash` shared prop | `Inertia::flash('success', …)->back()` |
 | a page rendering its own domain-error banner | the toast outlet on the `flash` event |
 | per-page data in `HandleInertiaRequests` | a prop on that page |
 | a View DTO with a query or a rule | the controller maps, the Action reads |
-| `Inertia::lazy()`, `router.cancel()`, `invalid` / `exception` listeners | `Inertia::optional()`, `router.cancelAll()`, `httpException` / `networkError` |
+| `Inertia::lazy()`, `router.cancel()`, `invalid` / `exception` listeners | `Inertia::optional()`, `router.cancelAll()`, `httpException` / `networkError` (Inertia 3) |
 | hardcoded UI copy | `lang/*.json` through the i18n helper |
 
 ---
@@ -581,8 +640,9 @@ production only.
 - [ ] `generated.d.ts` regenerated and committed; shared props, flash and layout props typed in `global.d.ts`; no hand-written server types.
 - [ ] Every URL comes from Wayfinder; route parameters are public ids; `instant` only on pages built to render without their props.
 - [ ] Forms use `<Form>` + Wayfinder; `useForm` only for real client state; optimistic only for safe, reversible changes.
-- [ ] Successes and domain errors use `Inertia::flash()` and render in the layout toast; HTTP errors render through `handleExceptionsUsing`.
+- [ ] Successes and domain errors use `Inertia::flash()` and render in the layout toast; HTTP errors render through `handleExceptionsUsing` (Inertia 3).
+- [ ] On Inertia 2: nothing tagged `(Inertia 3)`, nothing tagged above the installed 2.x minor.
 - [ ] No client store, no client data fetching, no Axios, `useHttp` only for non-page requests, no business or permission logic in pages.
 - [ ] Global abilities via `auth.can` (`auth` a once prop, `null` when signed out); no roles on the client.
 - [ ] Tier-1 `assertInertia` tests for every page (deferred props loaded), `assertInertiaFlash` on writes; browser tests for critical journeys and optimistic forms.
-- [ ] `npm run types`, `lint`, `format:check`, `build` and the generated-types diff pass.
+- [ ] `npm run types`, `lint`, `format:check`, `build` and `composer types:fresh` pass.

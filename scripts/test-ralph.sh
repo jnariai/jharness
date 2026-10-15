@@ -177,6 +177,16 @@ if [ "$write" -eq 1 ]; then
   echo "impl $n" > "src/impl-$n.txt"
 fi
 
+# adds-lint: a 1a sessao instala `composer lint` (fase de fundacao).
+# adds-project: a 1a sessao cria o projeto (composer.json com test).
+if [ "$n" -eq 1 ] && [ "$scenario" = "adds-lint" ]; then
+  printf '{ "scripts": { "lint": "pint --test", "test": "phpunit" } }\n' > composer.json
+fi
+if [ "$n" -eq 1 ] && [ "$scenario" = "adds-project" ]; then
+  touch artisan
+  printf '{ "scripts": { "test": "phpunit" } }\n' > composer.json
+fi
+
 if [ "$scenario" = "false-429" ]; then
   # 429 no MEIO do log: e output de teste do projeto, nao limite de uso.
   echo "FAIL tests/HttpClientTest: expected 429 Too Many Requests, got 200"
@@ -754,6 +764,57 @@ if case_enabled test-cmd-no-lint; then
   rc=$(run_ralph "$d" ok --engine claude --test-cmd "$d/test.sh")
   assert_eq 0 "$rc" "exit 0"
   assert_not_contains "$d/out.log" "composer lint" "override sem lint"
+fi
+
+# Fake `composer` no PATH do caso: lint grava que rodou, test delega ao test.sh.
+make_composer_mock() {
+  cat > "$1/bin/composer" <<'COMPOSER'
+#!/usr/bin/env bash
+case "${1:-}" in
+  lint) touch "$MOCK_STATE/lint_ran"; exit 0 ;;
+  test) exec "$MOCK_TEST_CMD" ;;
+esac
+exit 0
+COMPOSER
+  chmod +x "$1/bin/composer"
+}
+
+if case_enabled refresh-lint; then
+  header "16e. Fase instala composer lint -> gate 2 do mesmo ciclo ja roda lint"
+  d=$(new_case refresh-lint)
+  make_composer_mock "$d"
+  touch "$d/repo/artisan"
+  printf '{ "scripts": { "test": "phpunit" } }\n' > "$d/repo/composer.json"
+  git -C "$d/repo" add -A && git -C "$d/repo" commit -q -m "chore: laravel"
+  rc=$(run_ralph "$d" adds-lint --engine claude)
+  assert_eq 0 "$rc" "exit 0"
+  assert_contains "$d/out.log" "test command (detected): composer test" "preflight sem lint"
+  assert_contains "$d/out.log" "test command changed (detected): composer lint && composer test" "re-deteccao antes do gate 2"
+  [ -f "$d/state/lint_ran" ] && ok "gate 2 rodou composer lint" || bad "gate 2 nao rodou composer lint"
+fi
+
+if case_enabled refresh-project; then
+  header "16f. Sem manifest no preflight, fase cria o projeto -> gate 2 liga"
+  d=$(new_case refresh-project)
+  make_composer_mock "$d"
+  rc=$(run_ralph "$d" adds-project --engine claude)
+  assert_eq 0 "$rc" "exit 0"
+  assert_contains "$d/out.log" "Gate 2 DISABLED: no test command resolved." "preflight sem gate 2"
+  assert_contains "$d/out.log" "test command changed (detected): composer test" "gate 2 ligado apos a fase"
+  [ -f "$d/state/test_calls" ] && ok "suite rodou" || bad "suite nunca rodou"
+fi
+
+if case_enabled refresh-override; then
+  header "16g. --test-cmd e fixo: lint instalado na fase nao muda o comando"
+  d=$(new_case refresh-override)
+  make_composer_mock "$d"
+  touch "$d/repo/artisan"
+  printf '{ "scripts": { "test": "phpunit" } }\n' > "$d/repo/composer.json"
+  git -C "$d/repo" add -A && git -C "$d/repo" commit -q -m "chore: laravel"
+  rc=$(run_ralph "$d" adds-lint --engine claude --test-cmd "$d/test.sh")
+  assert_eq 0 "$rc" "exit 0"
+  assert_not_contains "$d/out.log" "test command changed" "override nao re-detectado"
+  [ ! -f "$d/state/lint_ran" ] && ok "lint nao rodou" || bad "override ganhou lint"
 fi
 
 # ---------------------------------------------------------------------------

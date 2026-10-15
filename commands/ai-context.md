@@ -106,9 +106,9 @@ The harness ships an opinionated convention layer under `guidelines/` inside the
 
 | `STACK` record | `composer.json` requires | Composed from |
 |---|---|---|
-| `laravel` | `laravel/framework` | `laravel.md` |
-| `laravel-react` | `laravel/framework`, and `package.json` requires `@inertiajs/react` | `laravel.md` + `inertia.md` + `react.md` |
-| `laravel-vue` | `laravel/framework`, and `package.json` requires `@inertiajs/vue3` | `laravel.md` + `inertia.md` + `vue.md` |
+| `laravel` | `laravel/framework`, with no Livewire, or an Inertia adapter that is not version 2 or 3 (warning on stderr) | `laravel.md` |
+| `laravel-react` | `laravel/framework`, and `package.json` requires `@inertiajs/react` 2 or 3 | `laravel.md` + `inertia.md` + `react.md` |
+| `laravel-vue` | `laravel/framework`, and `package.json` requires `@inertiajs/vue3` 2 or 3 | `laravel.md` + `inertia.md` + `vue.md` |
 | `laravel-livewire` | `laravel/framework` + `livewire/livewire`, no Inertia package | `laravel.md` + `livewire.md` |
 | `none` | neither | — |
 

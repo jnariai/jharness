@@ -8,8 +8,8 @@ This block is stripped from the copy.
 <!-- harness-meta:end -->
 
 Stack assumed: the **official Vue starter kit** — Vue 3, TypeScript, Inertia 3,
-Tailwind, shadcn-vue, Wayfinder. Every Laravel and Inertia rule still applies; this
-part adds only what is specific to Vue.
+Tailwind, shadcn-vue, Wayfinder. Every Laravel and Inertia rule still applies,
+including the Inertia version tags; this part adds only what is specific to Vue.
 
 ---
 
@@ -115,7 +115,7 @@ defineProps<{
 ## Flash and toasts
 
 One `FlashToaster.vue` in the app layout subscribes to the router's `flash` event
-(`router.on('flash', …)` in `onMounted`, removed in `onUnmounted`) and shows
+(Inertia 2.3.3+) (`router.on('flash', …)` in `onMounted`, removed in `onUnmounted`) and shows
 `flash.success` / `flash.error` with the kit's toast primitive. Pages never render domain
 errors themselves.
 
