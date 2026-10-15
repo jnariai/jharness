@@ -105,6 +105,14 @@ Características:
 ./ralph.sh .spec/features/<slug>/PHASES.md
 ```
 
+### `/plan:quick` — planejamento enxuto
+
+```
+/plan:quick "<descrição da feature ou caminho para um arquivo de descrição>"
+```
+
+O irmão pequeno do `/plan` para features pequenas: sem agentes, sem SPEC, sem clarifier, sem contratos. Lê o `AGENTS.md`, as coding guidelines e o código que a feature toca, rascunha um objetivo + 3–7 critérios de aceite binários, pede uma única confirmação (com no máximo 3 perguntas bloqueantes) e escreve um único arquivo — `.spec/features/<slug>/PHASES.md` — no formato que o `ralph.sh` executa: 1–3 fases de tarefas em fatias de caso de uso, cada uma com caminhos reais, critérios de aceite e testes. Escopo maior que ~3 fases ou ~10 tarefas → recomenda o `/plan`. Nunca escreve código de aplicação.
+
 ### `/ai-context` — árvore de contexto canônica
 
 ```
@@ -148,6 +156,21 @@ Lançador do `scripts/ralph.sh` de dentro do Claude Code. Resolve o documento de
 - **`--dashboard`** precisa de um terminal de verdade, então o comando imprime a linha para você rodar em vez de lançar.
 - Reporta a partir de `.phases/state/run.tsv` sob demanda e ao fim do run: fases concluídas / puladas / falhas, o gate que reprovou e o caminho do log.
 - **Nunca implementa uma fase, edita o documento de fases ou commita.** O `ralph.sh` é a única coisa que commita — um commit por fase validada.
+
+### `/bugfix` — corrige um bug e impede que ele volte
+
+```
+/bugfix "<descrição do bug, erro, ou caminho para um relato>" [--test-cmd "<cmd>"]
+```
+
+Corrige um bug na causa raiz e depois adiciona um teste de regressão para que ele nunca mais volte. Só termina quando a causa está corrigida, o teste de regressão comprovadamente protege contra ela e a suíte está verde.
+
+- **Reproduz antes de editar** — rastreia o gatilho até a primeira linha que dá errado e informa a causa raiz (`file:line`) antes de mexer no código. Sem conseguir reproduzir ou localizar → para e diz do que precisa; nada de correção especulativa.
+- **Correção mínima** — só os arquivos do bug; sem refactors ou mudanças de passagem (elas vão listadas no resumo). Segue `docs/agents/coding_guidelines.md`.
+- **Teste de regressão pelo ponto de entrada real** — exigido pelas guidelines Laravel e pelo stub do `AGENTS.md` (`Never in this repository`): nenhuma correção de bug entra sem ele — o nível mais alto que alcança o bug a baixo custo (um teste de feature Pest tier 1 em projeto Laravel do harness), afirmando exatamente o resultado esperado.
+- **Prova vermelho/verde** — a correção é retirada, o teste de regressão tem que falhar com o sintoma do bug, depois a correção volta e o teste passa. Teste que passa sem a correção é reescrito.
+- **Suíte completa + lint** — falhas causadas pela correção são corrigidas; falhas pré-existentes são reportadas, não tocadas.
+- Nunca commita, faz stage ou stash; arquivos já modificados antes ficam intocados.
 
 ### `/update` — atualiza o harness e as guidelines do projeto
 
@@ -342,7 +365,9 @@ commands/
   init/                        /init:project-description, user-stories,
                                database-schema, project-phases
   plan.md                      /plan (roteador do pipeline de planejamento)
+  plan/quick.md                /plan:quick (plano único pronto para o ralph)
   ai-context.md                /ai-context (roteador da árvore de contexto)
+  bugfix.md                    /bugfix (correção na causa raiz + teste de regressão provado)
   ralph.md                     /ralph (lançador de execução)
   update.md                    /update (sync do harness + guidelines do GitHub)
 agents/                        specifier, clarifier, planner,

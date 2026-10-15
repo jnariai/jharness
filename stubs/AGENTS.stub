@@ -25,6 +25,9 @@
 - An array crossing a class boundary. Public arguments and returns are models, VOs,
   DTOs, enums or typed Collections.
 - A `*Service`, `*Manager` or `*Repository` class. One Action per intent.
+- A bug fix without a regression test. The test replays the bug through its entry
+  point, fails with the fix taken out and passes with it back — proven, not
+  assumed. Fix and test land in the same commit.
 
 ## Agent documentation
 

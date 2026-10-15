@@ -84,7 +84,8 @@ every rule here still applies there.
     ULID (`ord_…`) — and that is the only id a URL, a prop or an API response ever
     carries.
 17. **Test everything, backend features first.** Feature tests of backend behavior
-    come before anything else; unit, gateway and frontend tests follow.
+    come before anything else; unit, gateway and frontend tests follow. **Every bug
+    fix ships with a regression test** that fails without the fix.
 18. **Rules that can be checked mechanically are.** Pest arch tests, Larastan, Pint
     and Rector run on every change. A rule a machine can catch is never left to
     review.
@@ -1735,6 +1736,15 @@ it('refuses to publish twice', function () {
 Rules:
 
 - **Every change ships with its tier-1 test first.**
+- **Every bug fix ships with a regression test — no exceptions.** The test replays
+  the trigger through the entry point that reached the bug and asserts the
+  expected outcome exactly (value, row, status, exception — never just "no
+  error"). It is proven, not assumed: with the fix taken out it fails with the
+  bug's symptom; with the fix back it passes. A test that passes without the fix
+  guards nothing — rewrite it. Name it for the behavior
+  (`it('keeps the discount when the cart is re-priced')`), never the ticket.
+  The fix and its test land in the same commit; the test is never deleted or
+  loosened to make a later change pass.
 - **Every Action gets at least**: the happy path, one test per invariant and business
   rule, and — at its entry point — one test for authorization denied and one for
   invalid input.
@@ -2089,5 +2099,6 @@ with or without auth — or Livewire), then, before any feature:
 - [ ] Migrations forward-only; foreign keys constrained with explicit delete behavior; soft deletes only when restore is real.
 - [ ] Every user-facing string goes through `__()`.
 - [ ] Tier-1 test first; idempotency tested by redelivery; no real vendor.
+- [ ] Bug fix → regression test, proven red without the fix and green with it.
 - [ ] `composer lint` (Pint, Larastan 6, Rector dry-run, `scripts/grep-gates.sh`) and `composer test` (with `tests/Arch.php`) pass.
 - [ ] Comments are shenanigan notes or generic/array-shape docblocks only.
