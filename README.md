@@ -123,6 +123,14 @@ Key characteristics:
 ./ralph.sh .spec/features/<slug>/PHASES.md
 ```
 
+### `/plan:quick` — lightweight planning
+
+```
+/plan:quick "<feature description or path to a description file>"
+```
+
+The small sibling of `/plan` for small features: no agents, no SPEC, no clarifier, no contracts. Reads `AGENTS.md`, the coding guidelines and the code the feature touches, drafts a goal + 3–7 binary acceptance criteria, asks for one confirmation (with at most 3 blocking questions), then writes a single file — `.spec/features/<slug>/PHASES.md` — in the format `ralph.sh` executes: 1–3 phases of use-case-slice tasks, each with real file paths, acceptance criteria and tests. Scope bigger than ~3 phases or ~10 tasks → it recommends `/plan` instead. Never writes application code.
+
 ### `/ai-context` — canonical context tree
 
 ```
@@ -168,6 +176,21 @@ Launcher for `scripts/ralph.sh` from inside Claude Code. It resolves the phase d
 - **`--dashboard`** needs a real terminal, so the command prints the line for you to run yourself instead of launching it.
 - Reports from `.phases/state/run.tsv` on request and when the run ends: completed / skipped / failed phases, the gate that failed, and the log path.
 - **Never implements a phase, edits the phase document, or commits.** `ralph.sh` is the only thing that commits — one commit per validated phase.
+
+### `/bugfix` — fix a bug and lock it out
+
+```
+/bugfix "<bug description, error, or path to a bug report>" [--test-cmd "<cmd>"]
+```
+
+Fixes one bug at its root cause, then adds a regression test so it never comes back. Done only when the cause is fixed, the regression test is proven to guard it, and the suite is green.
+
+- **Reproduce before editing** — traces the trigger to the first line that goes wrong and states the root cause (`file:line`) before touching code. Can't reproduce or locate it → stops and says what it needs; no speculative fixes.
+- **Narrowest fix** — only the bug's files; no refactors or drive-by changes (they are listed in the summary instead). Follows `docs/agents/coding_guidelines.md`.
+- **Regression test through the real entry point** — required by the Laravel guidelines and the `AGENTS.md` stub (`Never in this repository`): no bug fix lands without one — the highest level that reaches the bug cheaply (a tier-1 Pest feature test on a harness Laravel project), asserting the expected outcome exactly.
+- **Red/green proof** — the fix is taken out, the regression test must fail with the bug's symptom, then the fix is restored and the test passes. A test that passes without the fix is rewritten.
+- **Full suite + lint** — failures it caused get fixed; pre-existing failures are reported, not touched.
+- Never commits, stages, or stashes; pre-existing dirty files are left alone.
 
 ### `/update` — update the harness and the project's guidelines
 
@@ -364,7 +387,9 @@ commands/
   init/                        /init:project-description, user-stories,
                                database-schema, project-phases
   plan.md                      /plan (planning pipeline router)
+  plan/quick.md                /plan:quick (single-file ralph-ready plan)
   ai-context.md                /ai-context (context tree router)
+  bugfix.md                    /bugfix (root-cause fix + proven regression test)
   ralph.md                     /ralph (execution launcher)
   update.md                    /update (harness + guidelines sync from GitHub)
 agents/                        specifier, clarifier, planner,
